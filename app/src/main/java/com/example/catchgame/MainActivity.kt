@@ -59,7 +59,6 @@ private data class FallingItem(
     val speed: Float
 )
 
-// Эффект всплывающего текста при клике (очки / урон)
 private data class FloatingText(
     val id: Int,
     val text: String,
@@ -77,9 +76,7 @@ private fun CatchGameApp() {
     var screen by remember { mutableStateOf(GameScreen.MENU) }
     var score by remember { mutableIntStateOf(0) }
     var bestScore by remember { mutableIntStateOf(prefs.getInt("best_score", 0)) }
-    var bestCombo by remember { mutableIntStateOf(prefs.getInt("best_combo", 0)) }
     var lives by remember { mutableIntStateOf(3) }
-    var combo by remember { mutableIntStateOf(0) }
     var slowTicks by remember { mutableIntStateOf(0) }
     var paused by remember { mutableStateOf(false) }
     var gameOver by remember { mutableStateOf(false) }
@@ -110,10 +107,6 @@ private fun CatchGameApp() {
         }
     }
 
-    LaunchedEffect(bestCombo) {
-        prefs.edit().putInt("best_combo", bestCombo).apply()
-    }
-
     fun feedback(isBomb: Boolean = false) {
         if (currentSoundOn) {
             try {
@@ -141,7 +134,6 @@ private fun CatchGameApp() {
     fun startGame() {
         score = 0
         lives = 3
-        combo = 0
         slowTicks = 0
         items = emptyList()
         floatingTexts = emptyList()
@@ -161,13 +153,12 @@ private fun CatchGameApp() {
                 MenuButton("Рекорды", "🏆") { screen = GameScreen.RECORDS }
                 MenuButton("Настройки", "⚙") { screen = GameScreen.SETTINGS }
                 Spacer(Modifier.height(16.dp))
-                Text("✨ Золото: +очки | 🔵 Время: замедление", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("✨ Золото: +5 очков | 🔵 Время: замедление", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }
         GameScreen.RECORDS -> {
             GamePanel(title = "РЕКОРДЫ", subtitle = "Ваши высшие достижения") {
                 InfoCard("Лучший счёт", "$bestScore очков", "🏆")
-                InfoCard("Максимальное комбо", "$bestCombo подряд", "🔥")
                 Spacer(Modifier.height(16.dp))
                 MenuButton("Назад", "←") { screen = GameScreen.MENU }
             }
@@ -199,7 +190,6 @@ private fun CatchGameApp() {
                 val screenWidth = constraints.maxWidth.toFloat()
                 val screenHeight = constraints.maxHeight.toFloat()
 
-                // Пульсация для Ultra HD элементов
                 val infiniteTransition = rememberInfiniteTransition(label = "pulse")
                 val pulseScale by infiniteTransition.animateFloat(
                     initialValue = 1f,
@@ -214,7 +204,7 @@ private fun CatchGameApp() {
                 LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
                     if (screen == GameScreen.GAME && !paused && !gameOver && screenWidth > 0f && screenHeight > 0f) {
                         while (true) {
-                            delay(25L) // Высокая частота кадров (~40 fps) для плавности
+                            delay(25L)
                             if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) break
 
                             val activeLevel = currentScore / 10 + 1
@@ -252,13 +242,6 @@ private fun CatchGameApp() {
                                 if (newY > screenHeight + item.radius * 2) null else item.copy(y = newY)
                             }
 
-                            // Анимация всплывающих текстов
-                            floatingTexts = floatingTexts.mapNotNull { ft ->
-                                val newY = ft.y - 3f
-                                val newAlpha = ft.alpha - 0.035f
-                                if (newAlpha <= 0f) null else ft.copy(y = newY, alpha = newAlpha)
-                            }
-
                             if (currentSlowTicks > 0) {
                                 slowTicks = (currentSlowTicks - 1).coerceAtLeast(0)
                             }
@@ -285,45 +268,27 @@ private fun CatchGameApp() {
                                     when (hit.kind) {
                                         ItemKind.BOMB -> {
                                             lives = (lives - 1).coerceAtLeast(0)
-                                            combo = 0
                                             feedback(isBomb = true)
-                                            floatingTexts = floatingTexts + FloatingText(nextTextId++, "-1 Жизнь", Color(0xFFFF3366), hit.x, hit.y)
                                             if (lives == 0) gameOver = true
                                         }
                                         ItemKind.GOLD -> {
-                                            combo += 1
-                                            bestCombo = maxOf(bestCombo, combo)
-                                            val pts = 5 + combo / 5
-                                            score += pts
+                                            score += 5
                                             feedback()
-                                            floatingTexts = floatingTexts + FloatingText(nextTextId++, "+$pts Золото!", Color(0xFFFFD700), hit.x, hit.y)
                                         }
                                         ItemKind.SLOW -> {
-                                            combo += 1
-                                            bestCombo = maxOf(bestCombo, combo)
                                             score += 2
                                             slowTicks = 120
                                             feedback()
-                                            floatingTexts = floatingTexts + FloatingText(nextTextId++, "⏳ Замедление", Color(0xFF00E5FF), hit.x, hit.y)
                                         }
                                         ItemKind.NORMAL -> {
-                                            combo += 1
-                                            bestCombo = maxOf(bestCombo, combo)
-                                            val pts = if (combo % 5 == 0) 4 else 1
-                                            score += pts
+                                            score += 1
                                             feedback()
-                                            if (pts > 1) {
-                                                floatingTexts = floatingTexts + FloatingText(nextTextId++, "+$pts Комбо!", Color(0xFFFF9100), hit.x, hit.y)
-                                            }
                                         }
                                     }
-                                } else {
-                                    combo = 0
                                 }
                             }
                         }
                 ) {
-                    // 1. Отрисовка падающих объектов с Ultra HD градиентами и свечением
                     items.forEach { item ->
                         val center = Offset(item.x, item.y)
                         val mainColor = when (item.kind) {
@@ -333,14 +298,12 @@ private fun CatchGameApp() {
                             ItemKind.SLOW -> Color(0xFF00E5FF)
                         }
 
-                        // Неоновое свечение (Bloom)
                         drawCircle(
                             color = mainColor.copy(alpha = 0.3f),
                             radius = item.radius * 1.6f * (if (item.kind == ItemKind.GOLD) pulseScale else 1f),
                             center = center
                         )
 
-                        // Объемный радиальный градиент
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(Color.White, mainColor, mainColor.copy(alpha = 0.7f)),
@@ -351,7 +314,6 @@ private fun CatchGameApp() {
                             center = center
                         )
 
-                        // Блик высокой четкости
                         drawCircle(
                             color = Color.White.copy(alpha = 0.8f),
                             radius = item.radius * 0.28f,
@@ -360,7 +322,6 @@ private fun CatchGameApp() {
                     }
                 }
 
-                // Верхняя панель HUD
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -387,20 +348,12 @@ private fun CatchGameApp() {
                         }
                     }
 
-                    if (combo >= 2 || slowTicks > 0) {
+                    if (slowTicks > 0) {
                         Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (combo >= 2) {
-                                Text("🔥 КОМБО x$combo", color = Color(0xFFFF9100), fontSize = 13.sp, fontWeight = FontWeight.Black)
-                            }
-                            if (slowTicks > 0) {
-                                Text("⏳ ВРЕМЯ ЗАМЕДЛЕНО", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Black)
-                            }
-                        }
+                        Text("⏳ ВРЕМЯ ЗАМЕДЛЕНО", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Black)
                     }
                 }
 
-                // Пауза / Экран завершения игры
                 if (paused && !gameOver) {
                     OverlayPanel(title = "ПАУЗА", subtitle = "Игра приостановлена") {
                         MenuButton("Продолжить", "▶") { paused = false }
