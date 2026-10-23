@@ -1,3 +1,4 @@
+
 package com.example.catchgame
 
 import android.os.Bundle
@@ -7,7 +8,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,11 +28,12 @@ import kotlin.random.Random
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Color(0xFF1E1E2E)
                 ) {
                     GameScreen()
                 }
@@ -36,23 +42,22 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-data class FallingItem(
+private data class FallingItem(
     val id: Int,
-    var x: Float,
-    var y: Float,
+    val x: Float,
+    val y: Float,
     val radius: Float,
     val isBomb: Boolean,
     val speed: Float
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameScreen() {
-    var score by remember { mutableStateOf(0) }
-    var lives by remember { mutableStateOf(3) }
-    var isGameOver by remember { mutableStateOf(false) }
-
-    var items by remember { mutableStateOf(listOf<FallingItem>()) }
+private fun GameScreen() {
+    var score by remember { mutableIntStateOf(0) }
+    var lives by remember { mutableIntStateOf(3) }
+    var gameOver by remember { mutableStateOf(false) }
+    var items by remember { mutableStateOf(emptyList<FallingItem>()) }
+    var nextId by remember { mutableIntStateOf(0) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -62,62 +67,67 @@ fun GameScreen() {
         val screenWidth = constraints.maxWidth.toFloat()
         val screenHeight = constraints.maxHeight.toFloat()
 
-        // Игровой цикл
-        LaunchedEffect(isGameOver) {
-            if (!isGameOver) {
-                var nextId = 0
-                while (!isGameOver) {
+        LaunchedEffect(gameOver, screenWidth, screenHeight) {
+            if (!gameOver && screenWidth > 80f && screenHeight > 0f) {
+                while (true) {
                     delay(30L)
 
-                    if (screenWidth > 0f && screenHeight > 0f) {
-                        if (Random.nextFloat() < 0.12f) {
-                            val isBomb = Random.nextFloat() < 0.25f
-                            val radius = 40f
-                            val x = Random.nextFloat() * (screenWidth - radius * 2) + radius
-                            items = items + FallingItem(
+                    val spawned = if (Random.nextFloat() < 0.12f) {
+                        val radius = 40f
+                        val maxX = (screenWidth - radius * 2)
+                            .coerceAtLeast(1f)
+
+                        listOf(
+                            FallingItem(
                                 id = nextId++,
-                                x = x,
+                                x = Random.nextFloat() * maxX + radius,
                                 y = -radius,
                                 radius = radius,
-                                isBomb = isBomb,
+                                isBomb = Random.nextFloat() < 0.25f,
                                 speed = Random.nextFloat() * 6f + 6f
                             )
-                        }
+                        )
+                    } else {
+                        emptyList()
+                    }
 
-                        items = items.mapNotNull { item ->
-                            val newY = item.y + item.speed
-                            if (newY > screenHeight + item.radius) {
-                                null
-                            } else {
-                                item.copy(y = newY)
-                            }
+                    items = (items + spawned).mapNotNull { item ->
+                        val moved = item.copy(y = item.y + item.speed)
+
+                        if (moved.y > screenHeight + moved.radius) {
+                            null
+                        } else {
+                            moved
                         }
                     }
                 }
             }
         }
 
-        // Игровое поле
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(isGameOver) {
-                    if (!isGameOver) {
-                        detectTapGestures { tapOffset ->
-                            val clickedItem = items.find { item ->
-                                (tapOffset - Offset(item.x, item.y)).getDistance() <= item.radius + 25f
+                .pointerInput(gameOver, items) {
+                    if (!gameOver) {
+                        detectTapGestures { tap ->
+                            val hit = items.lastOrNull { item ->
+                                (tap - Offset(item.x, item.y))
+                                    .getDistance() <= item.radius + 25f
                             }
 
-                            if (clickedItem != null) {
-                                items = items.filter { it.id != clickedItem.id }
+                            if (hit != null) {
+                                items = items.filterNot {
+                                    it.id == hit.id
+                                }
 
-                                if (clickedItem.isBomb) {
-                                    lives -= 1
-                                    if (lives <= 0) {
-                                        isGameOver = true
+                                if (hit.isBomb) {
+                                    lives = (lives - 1).coerceAtLeast(0)
+
+                                    if (lives == 0) {
+                                        gameOver = true
                                     }
                                 } else {
-                                    score += 1
+                                    score++
                                 }
                             }
                         }
@@ -126,64 +136,94 @@ fun GameScreen() {
         ) {
             items.forEach { item ->
                 drawCircle(
-                    color = if (item.isBomb) Color(0xFFFF5555) else Color(0xFFFFCC00),
+                    color = if (item.isBomb) {
+                        Color(0xFFFF5555)
+                    } else {
+                        Color(0xFFFFCC00)
+                    },
                     radius = item.radius,
                     center = Offset(item.x, item.y)
                 )
+
+                if (item.isBomb) {
+                    drawCircle(
+                        color = Color.White,
+                        radius = 5f,
+                        center = Offset(
+                            item.x - 10f,
+                            item.y - 10f
+                        )
+                    )
+                }
             }
         }
 
-        // Верхняя панель
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Счет: $score",
+                text = "Счёт: $score",
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
+
             Text(
-                text = "Жизни: ${"❤️".repeat(maxOf(0, lives))}",
-                fontSize = 20.sp
+                text = "Жизни: ${"❤️".repeat(lives)}",
+                color = Color.White,
+                fontSize = 18.sp
             )
         }
 
-        // Экран Game Over
-        if (isGameOver) {
+        if (gameOver) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.8f)),
+                    .background(Color.Black.copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
                     Text(
                         text = "Игра окончена",
                         color = Color.White,
-                        fontSize = 32.sp,
+                        fontSize = 30.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Text(
-                        text = "Ваш результат: $score",
+                        text = "Твой результат: $score",
                         color = Color.LightGray,
-                        fontSize = 18.sp
+                        fontSize = 21.sp
                     )
+
                     Spacer(modifier = Modifier.height(24.dp))
+
                     Button(
                         onClick = {
                             score = 0
                             lives = 3
                             items = emptyList()
-                            isGameOver = false
+                            nextId = 0
+                            gameOver = false
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF50FA7B))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF50FA7B)
+                        )
                     ) {
-                        Text(text = "Играть снова", color = Color.Black, fontSize = 16.sp)
+                        Text(
+                            text = "Играть снова",
+                            color = Color.Black,
+                            fontSize = 18.sp
+                        )
                     }
                 }
             }
