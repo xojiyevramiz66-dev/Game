@@ -350,28 +350,23 @@ private fun CatchGameApp() {
                         }
                         val glowScale = if (item.kind == ItemKind.GOLD) pulse else 1f
 
-                        // Внешнее свечение несколькими полупрозрачными слоями
+                        // Оставляем исходное свечение; удалена только отбрасываемая тень.
                         drawCircle(color.copy(alpha = 0.07f), item.radius * 2.05f * glowScale, center)
                         drawCircle(color.copy(alpha = 0.12f), item.radius * 1.68f * glowScale, center)
                         drawCircle(color.copy(alpha = 0.20f), item.radius * 1.34f * glowScale, center)
 
-                        // Тень для визуального объёма
-                        drawCircle(
-                            Color.Black.copy(alpha = 0.38f),
-                            radius = item.radius * 1.02f,
-                            center = Offset(item.x + 3f, item.y + 5f)
-                        )
-
-                        // Объёмная сфера
+                        // Объёмная сфера — исходный вид сохранён.
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(
                                     Color.White,
                                     color.copy(alpha = 0.98f),
                                     color.copy(alpha = 0.90f),
-                                    color.copy(red = (color.red * 0.43f).coerceIn(0f, 1f),
+                                    color.copy(
+                                        red = (color.red * 0.43f).coerceIn(0f, 1f),
                                         green = (color.green * 0.43f).coerceIn(0f, 1f),
-                                        blue = (color.blue * 0.55f).coerceIn(0f, 1f))
+                                        blue = (color.blue * 0.55f).coerceIn(0f, 1f)
+                                    )
                                 ),
                                 center = Offset(item.x - item.radius * 0.34f, item.y - item.radius * 0.38f),
                                 radius = item.radius * 1.48f
