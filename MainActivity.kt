@@ -36,83 +36,76 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Модель падающего объекта
 data class FallingItem(
     val id: Int,
     var x: Float,
     var y: Float,
     val radius: Float,
-    val isBomb: Boolean, // true — бомба (отнимает жизнь), false — монетка (дает очко)
+    val isBomb: Boolean,
     val speed: Float
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GameScreen() {
     var score by remember { mutableStateOf(0) }
     var lives by remember { mutableStateOf(3) }
     var isGameOver by remember { mutableStateOf(false) }
 
-    // Список активных падающих предметов
     var items by remember { mutableStateOf(listOf<FallingItem>()) }
-    var screenWidth by remember { mutableStateOf(0f) }
-    var screenHeight by remember { mutableStateOf(0f) }
 
-    // Игровой цикл (обновление позиций предметов)
-    LaunchedEffect(isGameOver) {
-        if (!isGameOver) {
-            var nextId = 0
-            while (!isGameOver) {
-                delay(30L) // Около 33 кадров в секунду
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF1E1E2E))
+    ) {
+        val screenWidth = constraints.maxWidth.toFloat()
+        val screenHeight = constraints.maxHeight.toFloat()
 
-                if (screenWidth > 0f && screenHeight > 0f) {
-                    // Спавн нового предмета сверху
-                    if (Random.nextFloat() < 0.12f) {
-                        val isBomb = Random.nextFloat() < 0.25f // 25% шанс бомбы
-                        val radius = 40f
-                        val x = Random.nextFloat() * (screenWidth - radius * 2) + radius
-                        items = items + FallingItem(
-                            id = nextId++,
-                            x = x,
-                            y = -radius,
-                            radius = radius,
-                            isBomb = isBomb,
-                            speed = Random.nextFloat() * 6f + 6f // Скорость падения
-                        )
-                    }
+        // Игровой цикл
+        LaunchedEffect(isGameOver) {
+            if (!isGameOver) {
+                var nextId = 0
+                while (!isGameOver) {
+                    delay(30L)
 
-                    // Двигаем предметы вниз и удаляем те, что улетели за экран
-                    items = items.mapNotNull { item ->
-                        val newY = item.y + item.speed
-                        if (newY > screenHeight + item.radius) {
-                            null
-                        } else {
-                            item.copy(y = newY)
+                    if (screenWidth > 0f && screenHeight > 0f) {
+                        if (Random.nextFloat() < 0.12f) {
+                            val isBomb = Random.nextFloat() < 0.25f
+                            val radius = 40f
+                            val x = Random.nextFloat() * (screenWidth - radius * 2) + radius
+                            items = items + FallingItem(
+                                id = nextId++,
+                                x = x,
+                                y = -radius,
+                                radius = radius,
+                                isBomb = isBomb,
+                                speed = Random.nextFloat() * 6f + 6f
+                            )
+                        }
+
+                        items = items.mapNotNull { item ->
+                            val newY = item.y + item.speed
+                            if (newY > screenHeight + item.radius) {
+                                null
+                            } else {
+                                item.copy(y = newY)
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF1E1E2E))
-            .boxWithConstraints {
-                screenWidth = constraints.maxWidth.toFloat()
-                screenHeight = constraints.maxHeight.toFloat()
-            }
-    ) {
-        // Игровое поле для отрисовки кругов
+        // Игровое поле
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(isGameOver) {
                     if (!isGameOver) {
                         detectTapGestures { tapOffset ->
-                            // Проверяем клик по предметам
                             val clickedItem = items.find { item ->
-                                (tapOffset - Offset(item.x, item.y)).getDistance() <= item.radius + 20f
+                                (tapOffset - Offset(item.x, item.y)).getDistance() <= item.radius + 25f
                             }
 
                             if (clickedItem != null) {
@@ -131,7 +124,6 @@ fun GameScreen() {
                     }
                 }
         ) {
-            // Отрисовка монеток (желтые) и бомб (красные)
             items.forEach { item ->
                 drawCircle(
                     color = if (item.isBomb) Color(0xFFFF5555) else Color(0xFFFFCC00),
@@ -141,7 +133,7 @@ fun GameScreen() {
             }
         }
 
-        // Верхняя панель (счет и жизни)
+        // Верхняя панель
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -160,7 +152,7 @@ fun GameScreen() {
             )
         }
 
-        // Экран конца игры (Game Over)
+        // Экран Game Over
         if (isGameOver) {
             Box(
                 modifier = Modifier
