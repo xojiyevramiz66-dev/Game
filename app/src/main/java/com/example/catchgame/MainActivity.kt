@@ -82,14 +82,22 @@ private fun CatchGameApp() {
 
     var screen by remember { mutableStateOf(GameScreen.MENU) }
     var score by remember { mutableIntStateOf(0) }
-    var bestScore by remember { mutableIntStateOf(prefs.getInt("best_score", 0)) }
+    var bestScore by remember {
+        mutableIntStateOf(prefs.getInt("best_score", 0))
+    }
     var lives by remember { mutableIntStateOf(3) }
     var slowSeconds by remember { mutableFloatStateOf(0f) }
     var paused by remember { mutableStateOf(false) }
     var gameOver by remember { mutableStateOf(false) }
-    var soundOn by remember { mutableStateOf(prefs.getBoolean("sound_on", true)) }
-    var vibrationOn by remember { mutableStateOf(prefs.getBoolean("vibration_on", true)) }
-    var items by remember { mutableStateOf<List<FallingItem>>(emptyList()) }
+    var soundOn by remember {
+        mutableStateOf(prefs.getBoolean("sound_on", true))
+    }
+    var vibrationOn by remember {
+        mutableStateOf(prefs.getBoolean("vibration_on", true))
+    }
+    var items by remember {
+        mutableStateOf<List<FallingItem>>(emptyList())
+    }
     var nextItemId by remember { mutableIntStateOf(0) }
 
     val currentItems by rememberUpdatedState(items)
@@ -191,291 +199,291 @@ private fun CatchGameApp() {
         }
 
         GameScreen.GAME -> {
-            BoxWithConstraints(
+            Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(
                         listOf(Color(0xFF03030B), Color(0xFF0A1027), Color(0xFF17183B))
                     )
                 )
             ) {
-                val screenWidth = constraints.maxWidth.toFloat()
-                val screenHeight = constraints.maxHeight.toFloat()
-                val transition = rememberInfiniteTransition(label = "visual-effects")
-                val pulse by transition.animateFloat(
-                    initialValue = 0.94f,
-                    targetValue = 1.12f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(850, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "gold-pulse"
-                )
-                val stars = remember(screenWidth, screenHeight) {
-                    List(72) {
-                        Star(
-                            x = Random.nextFloat() * screenWidth.coerceAtLeast(1f),
-                            y = Random.nextFloat() * screenHeight.coerceAtLeast(1f),
-                            radius = Random.nextFloat() * 1.8f + 0.35f,
-                            phase = Random.nextFloat() * 6.28f
-                        )
-                    }
-                }
-                var visualTime by remember { mutableFloatStateOf(0f) }
-
-                LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
-                    if (screen == GameScreen.GAME && !paused && !gameOver &&
-                        screenWidth > 0f && screenHeight > 0f
-                    ) {
-                        var previousFrameMs = SystemClock.elapsedRealtime()
-                        while (true) {
-                            delay(16L)
-                            if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) break
-                            val nowMs = SystemClock.elapsedRealtime()
-                            val deltaSeconds = ((nowMs - previousFrameMs) / 1000f).coerceIn(0f, 0.05f)
-                            previousFrameMs = nowMs
-                            visualTime += deltaSeconds
-                            val frameScale = deltaSeconds / 0.025f
-                            val activeLevel = currentScore / 10 + 1
-                            val spawnRate = 3.4f * (1f + (activeLevel - 1) * 0.09f)
-                            val spawnChance = (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.24f)
-                            val updatedItems = currentItems.toMutableList()
-
-                            if (Random.nextFloat() < spawnChance) {
-                                val radius = 40f
-                                val maxX = (screenWidth - radius * 2).coerceAtLeast(0f)
-                                val roll = Random.nextFloat()
-                                val kind = when {
-                                    roll < 0.15f -> ItemKind.BOMB
-                                    roll < 0.27f -> ItemKind.GOLD
-                                    roll < 0.34f -> ItemKind.SLOW
-                                    else -> ItemKind.NORMAL
-                                }
-                                val levelBonus = ((activeLevel - 1) * 0.3f).coerceAtMost(6f)
-                                val speed = Random.nextFloat() * 2.5f + 3.5f + levelBonus
-                                updatedItems.add(
-                                    FallingItem(
-                                        id = nextItemId++,
-                                        x = Random.nextFloat() * maxX + radius,
-                                        y = -radius,
-                                        radius = if (kind == ItemKind.GOLD) 34f else radius,
-                                        kind = kind,
-                                        speed = speed
+                Column(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xEE17172F), Color(0xEE202044), Color(0xEE17172F))
                                     )
                                 )
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("СЧЁТ", color = Color(0xFF9BA4C7), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("$score", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black)
+                                Text("РЕКОРД: $bestScore", color = Color(0xFFFFD700), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
-
-                            val timeScale = if (currentSlowSeconds > 0f) 0.38f else 1f
-                            items = updatedItems.mapNotNull { item ->
-                                val newY = item.y + item.speed * timeScale * frameScale
-                                if (newY > screenHeight + item.radius * 2) null
-                                else item.copy(y = newY)
-                            }
-                            if (currentSlowSeconds > 0f) {
-                                slowSeconds = (currentSlowSeconds - deltaSeconds).coerceAtLeast(0f)
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("УРОВЕНЬ $level", color = Color(0xFF00E5FF), fontSize = 12.sp, fontWeight = FontWeight.Black)
+                                Spacer(Modifier.height(4.dp))
+                                Text("❤️".repeat(lives), fontSize = 18.sp)
                             }
                         }
+                        if (slowSeconds > 0f) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("⏳ ВРЕМЯ ЗАМЕДЛЕНО", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Black)
+                        }
                     }
-                }
 
-                Canvas(
-                    Modifier.fillMaxSize().pointerInput(Unit) {
-                        detectTapGestures { tap ->
-                            if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) {
-                                return@detectTapGestures
+                    BoxWithConstraints(
+                        Modifier.fillMaxWidth().weight(1f)
+                    ) {
+                        val screenWidth = constraints.maxWidth.toFloat()
+                        val screenHeight = constraints.maxHeight.toFloat()
+                        val transition = rememberInfiniteTransition(label = "visual-effects")
+                        val stars = remember(screenWidth, screenHeight) {
+                            List(72) {
+                                Star(
+                                    x = Random.nextFloat() * screenWidth.coerceAtLeast(1f),
+                                    y = Random.nextFloat() * screenHeight.coerceAtLeast(1f),
+                                    radius = Random.nextFloat() * 1.8f + 0.35f,
+                                    phase = Random.nextFloat() * 6.28f
+                                )
                             }
-                            val hit = currentItems.filter { item ->
-                                val dx = tap.x - item.x
-                                val dy = tap.y - item.y
-                                val hitRadius = item.radius + 30f
-                                dx * dx + dy * dy <= hitRadius * hitRadius
-                            }.minByOrNull { item ->
-                                val dx = tap.x - item.x
-                                val dy = tap.y - item.y
-                                dx * dx + dy * dy
-                            }
+                        }
+                        var visualTime by remember { mutableFloatStateOf(0f) }
 
-                            if (hit != null) {
-                                items = currentItems.filterNot { it.id == hit.id }
-                                when (hit.kind) {
-                                    ItemKind.BOMB -> {
-                                        lives = (lives - 1).coerceAtLeast(0)
-                                        feedback(isBomb = true)
-                                        if (lives == 0) gameOver = true
+                        LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
+                            if (screen == GameScreen.GAME && !paused && !gameOver &&
+                                screenWidth > 0f && screenHeight > 0f
+                            ) {
+                                var previousFrameMs = SystemClock.elapsedRealtime()
+                                while (true) {
+                                    delay(16L)
+                                    if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) break
+                                    val nowMs = SystemClock.elapsedRealtime()
+                                    val deltaSeconds = ((nowMs - previousFrameMs) / 1000f).coerceIn(0f, 0.05f)
+                                    previousFrameMs = nowMs
+                                    visualTime += deltaSeconds
+                                    val frameScale = deltaSeconds / 0.025f
+                                    val activeLevel = currentScore / 10 + 1
+                                    val spawnRate = 3.4f * (1f + (activeLevel - 1) * 0.09f)
+                                    val spawnChance = (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.24f)
+                                    val updatedItems = currentItems.toMutableList()
+
+                                    if (Random.nextFloat() < spawnChance) {
+                                        val radius = 40f
+                                        val maxX = (screenWidth - radius * 2).coerceAtLeast(0f)
+                                        val roll = Random.nextFloat()
+                                        val kind = when {
+                                            roll < 0.15f -> ItemKind.BOMB
+                                            roll < 0.27f -> ItemKind.GOLD
+                                            roll < 0.34f -> ItemKind.SLOW
+                                            else -> ItemKind.NORMAL
+                                        }
+                                        val levelBonus = ((activeLevel - 1) * 0.3f).coerceAtMost(6f)
+                                        val speed = Random.nextFloat() * 2.5f + 3.5f + levelBonus
+                                        updatedItems.add(
+                                            FallingItem(
+                                                id = nextItemId++,
+                                                x = Random.nextFloat() * maxX + radius,
+                                                y = -radius,
+                                                radius = if (kind == ItemKind.GOLD) 34f else radius,
+                                                kind = kind,
+                                                speed = speed
+                                            )
+                                        )
                                     }
-                                    ItemKind.GOLD -> { score += 5; feedback() }
-                                    ItemKind.SLOW -> { score += 2; slowSeconds = 3f; feedback() }
-                                    ItemKind.NORMAL -> { score += 1; feedback() }
+
+                                    val timeScale = if (currentSlowSeconds > 0f) 0.38f else 1f
+                                    items = updatedItems.mapNotNull { item ->
+                                        val newY = item.y + item.speed * timeScale * frameScale
+                                        if (newY > screenHeight + item.radius * 2) null
+                                        else item.copy(y = newY)
+                                    }
+                                    if (currentSlowSeconds > 0f) {
+                                        slowSeconds = (currentSlowSeconds - deltaSeconds).coerceAtLeast(0f)
+                                    }
                                 }
                             }
                         }
-                    }
-                ) {
-                    // Атмосферный звёздный фон
-                    stars.forEach { star ->
-                        val shimmer = (0.38f + 0.32f * sin(visualTime * 1.7f + star.phase)).coerceIn(0.08f, 0.85f)
-                        drawCircle(
-                            Color(0xFFB7D8FF).copy(alpha = shimmer),
-                            radius = star.radius,
-                            center = Offset(star.x, star.y)
-                        )
-                    }
 
-                    // Мягкие световые пятна на фоне
-                    drawCircle(
-                        Brush.radialGradient(
-                            listOf(Color(0xFF3730A3).copy(alpha = 0.17f), Color.Transparent),
-                            center = Offset(size.width * 0.18f, size.height * 0.35f),
-                            radius = size.width * 0.58f
-                        ),
-                        radius = size.width * 0.58f,
-                        center = Offset(size.width * 0.18f, size.height * 0.35f)
-                    )
-                    drawCircle(
-                        Brush.radialGradient(
-                            listOf(Color(0xFF007C91).copy(alpha = 0.12f), Color.Transparent),
-                            center = Offset(size.width * 0.88f, size.height * 0.72f),
-                            radius = size.width * 0.48f
-                        ),
-                        radius = size.width * 0.48f,
-                        center = Offset(size.width * 0.88f, size.height * 0.72f)
-                    )
+                        Canvas(
+                            Modifier.fillMaxSize().pointerInput(Unit) {
+                                detectTapGestures { tap ->
+                                    if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) {
+                                        return@detectTapGestures
+                                    }
+                                    val hit = currentItems.filter { item ->
+                                        val dx = tap.x - item.x
+                                        val dy = tap.y - item.y
+                                        val hitRadius = item.radius + 70f
+                                        dx * dx + dy * dy <= hitRadius * hitRadius
+                                    }.minByOrNull { item ->
+                                        val dx = tap.x - item.x
+                                        val dy = tap.y - item.y
+                                        dx * dx + dy * dy
+                                    }
 
-                    items.forEach { item ->
-                        val center = Offset(item.x, item.y)
-                        val color = when (item.kind) {
-                            ItemKind.NORMAL -> Color(0xFFFFC928)
-                            ItemKind.BOMB -> Color(0xFFFF315A)
-                            ItemKind.GOLD -> Color(0xFFFFD700)
-                            ItemKind.SLOW -> Color(0xFF00D9FF)
-                        }
-                        val glowScale = if (item.kind == ItemKind.GOLD) pulse else 1f
-
-                        // Оставляем исходное свечение; удалена только отбрасываемая тень.
-                        drawCircle(color.copy(alpha = 0.07f), item.radius * 2.05f * glowScale, center)
-                        drawCircle(color.copy(alpha = 0.12f), item.radius * 1.68f * glowScale, center)
-                        drawCircle(color.copy(alpha = 0.20f), item.radius * 1.34f * glowScale, center)
-
-                        // Объёмная сфера — исходный вид сохранён.
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White,
-                                    color.copy(alpha = 0.98f),
-                                    color.copy(alpha = 0.90f),
-                                    color.copy(
-                                        red = (color.red * 0.43f).coerceIn(0f, 1f),
-                                        green = (color.green * 0.43f).coerceIn(0f, 1f),
-                                        blue = (color.blue * 0.55f).coerceIn(0f, 1f)
-                                    )
-                                ),
-                                center = Offset(item.x - item.radius * 0.34f, item.y - item.radius * 0.38f),
-                                radius = item.radius * 1.48f
-                            ),
-                            radius = item.radius,
-                            center = center
-                        )
-                        drawCircle(
-                            color.copy(alpha = 0.85f),
-                            radius = item.radius,
-                            center = center,
-                            style = Stroke(width = 1.7f)
-                        )
-
-                        // Блик и отражённая дуга
-                        drawCircle(
-                            Color.White.copy(alpha = 0.88f),
-                            radius = item.radius * 0.20f,
-                            center = Offset(item.x - item.radius * 0.34f, item.y - item.radius * 0.38f)
-                        )
-                        drawArc(
-                            color = Color.White.copy(alpha = 0.46f),
-                            startAngle = 205f,
-                            sweepAngle = 105f,
-                            useCenter = false,
-                            topLeft = Offset(item.x - item.radius * 0.68f, item.y - item.radius * 0.68f),
-                            size = androidx.compose.ui.geometry.Size(item.radius * 1.36f, item.radius * 1.36f),
-                            style = Stroke(width = 2.1f, cap = StrokeCap.Round)
-                        )
-
-                        // У каждого типа своя узнаваемая графическая деталь
-                        when (item.kind) {
-                            ItemKind.NORMAL -> {
+                                    if (hit != null) {
+                                        items = currentItems.filterNot { it.id == hit.id }
+                                        when (hit.kind) {
+                                            ItemKind.BOMB -> {
+                                                lives = (lives - 1).coerceAtLeast(0)
+                                                feedback(isBomb = true)
+                                                if (lives == 0) gameOver = true
+                                            }
+                                            ItemKind.GOLD -> { score += 5; feedback() }
+                                            ItemKind.SLOW -> { score += 2; slowSeconds = 3f; feedback() }
+                                            ItemKind.NORMAL -> { score += 1; feedback() }
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            stars.forEach { star ->
+                                val shimmer = (0.38f + 0.32f * sin(visualTime * 1.7f + star.phase)).coerceIn(0.08f, 0.85f)
                                 drawCircle(
-                                    Color.White.copy(alpha = 0.42f),
-                                    radius = item.radius * 0.48f,
-                                    center = Offset(item.x + item.radius * 0.12f, item.y + item.radius * 0.18f),
-                                    style = Stroke(width = 1.4f)
+                                    Color(0xFFB7D8FF).copy(alpha = shimmer),
+                                    radius = star.radius,
+                                    center = Offset(star.x, star.y)
                                 )
                             }
-                            ItemKind.BOMB -> {
-                                val fuseStart = Offset(item.x + item.radius * 0.28f, item.y - item.radius * 0.76f)
-                                val fuseEnd = Offset(item.x + item.radius * 0.58f, item.y - item.radius * 1.02f)
-                                drawLine(Color(0xFFFFD7A1), fuseStart, fuseEnd, strokeWidth = 4f, cap = StrokeCap.Round)
-                                drawCircle(Color(0xFFFFE082), 4.2f, fuseEnd)
-                                drawLine(Color.White.copy(alpha = 0.9f),
-                                    Offset(item.x - item.radius * 0.28f, item.y),
-                                    Offset(item.x + item.radius * 0.28f, item.y),
-                                    strokeWidth = 3f, cap = StrokeCap.Round)
-                                drawLine(Color.White.copy(alpha = 0.9f),
-                                    Offset(item.x, item.y - item.radius * 0.28f),
-                                    Offset(item.x, item.y + item.radius * 0.28f),
-                                    strokeWidth = 3f, cap = StrokeCap.Round)
-                            }
-                            ItemKind.GOLD -> {
-                                val path = Path()
-                                val outer = item.radius * 0.43f
-                                val inner = outer * 0.46f
-                                for (i in 0 until 10) {
-                                    val angle = -PI / 2.0 + i * PI / 5.0
-                                    val r = if (i % 2 == 0) outer else inner
-                                    val px = item.x + cos(angle).toFloat() * r
-                                    val py = item.y + sin(angle).toFloat() * r
-                                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+
+                            drawCircle(
+                                Brush.radialGradient(
+                                    listOf(Color(0xFF3730A3).copy(alpha = 0.17f), Color.Transparent),
+                                    center = Offset(size.width * 0.18f, size.height * 0.35f),
+                                    radius = size.width * 0.58f
+                                ),
+                                radius = size.width * 0.58f,
+                                center = Offset(size.width * 0.18f, size.height * 0.35f)
+                            )
+                            drawCircle(
+                                Brush.radialGradient(
+                                    listOf(Color(0xFF007C91).copy(alpha = 0.12f), Color.Transparent),
+                                    center = Offset(size.width * 0.88f, size.height * 0.72f),
+                                    radius = size.width * 0.48f
+                                ),
+                                radius = size.width * 0.48f,
+                                center = Offset(size.width * 0.88f, size.height * 0.72f)
+                            )
+
+                            items.forEach { item ->
+                                val center = Offset(item.x, item.y)
+                                val color = when (item.kind) {
+                                    ItemKind.NORMAL -> Color(0xFFFFC928)
+                                    ItemKind.BOMB -> Color(0xFFFF315A)
+                                    ItemKind.GOLD -> Color(0xFFFFD700)
+                                    ItemKind.SLOW -> Color(0xFF00D9FF)
                                 }
-                                path.close()
-                                drawPath(path, Color(0xFFFFF4B0))
-                            }
-                            ItemKind.SLOW -> {
-                                drawCircle(Color.White.copy(alpha = 0.9f), item.radius * 0.48f,
-                                    center, style = Stroke(width = 2.4f))
-                                drawLine(Color.White, center,
-                                    Offset(item.x, item.y - item.radius * 0.28f),
-                                    strokeWidth = 2.5f, cap = StrokeCap.Round)
-                                drawLine(Color.White, center,
-                                    Offset(item.x + item.radius * 0.23f, item.y + item.radius * 0.10f),
-                                    strokeWidth = 2.5f, cap = StrokeCap.Round)
+
+                                // ТЕНИ И ОРЕОЛЫ ПОЛНОСТЬЮ УДАЛЕНЫ
+
+                                // Сама сфера шарика
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            Color.White,
+                                            color.copy(alpha = 0.98f),
+                                            color.copy(alpha = 0.90f),
+                                            color.copy(
+                                                red = (color.red * 0.43f).coerceIn(0f, 1f),
+                                                green = (color.green * 0.43f).coerceIn(0f, 1f),
+                                                blue = (color.blue * 0.55f).coerceIn(0f, 1f)
+                                            )
+                                        ),
+                                        center = Offset(item.x - item.radius * 0.34f, item.y - item.radius * 0.38f),
+                                        radius = item.radius * 1.48f
+                                    ),
+                                    radius = item.radius,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color.copy(alpha = 0.85f),
+                                    radius = item.radius,
+                                    center = center,
+                                    style = Stroke(width = 1.7f)
+                                )
+
+                                drawCircle(
+                                    Color.White.copy(alpha = 0.88f),
+                                    radius = item.radius * 0.20f,
+                                    center = Offset(item.x - item.radius * 0.34f, item.y - item.radius * 0.38f)
+                                )
+                                drawArc(
+                                    color = Color.White.copy(alpha = 0.46f),
+                                    startAngle = 205f,
+                                    sweepAngle = 105f,
+                                    useCenter = false,
+                                    topLeft = Offset(item.x - item.radius * 0.68f, item.y - item.radius * 0.68f),
+                                    size = androidx.compose.ui.geometry.Size(item.radius * 1.36f, item.radius * 1.36f),
+                                    style = Stroke(width = 2.1f, cap = StrokeCap.Round)
+                                )
+
+                                when (item.kind) {
+                                    ItemKind.NORMAL -> {
+                                        drawCircle(
+                                            Color.White.copy(alpha = 0.42f),
+                                            radius = item.radius * 0.48f,
+                                            center = Offset(item.x + item.radius * 0.12f, item.y + item.radius * 0.18f),
+                                            style = Stroke(width = 1.4f)
+                                        )
+                                    }
+                                    ItemKind.BOMB -> {
+                                        val fuseStart = Offset(item.x + item.radius * 0.28f, item.y - item.radius * 0.76f)
+                                        val fuseEnd = Offset(item.x + item.radius * 0.58f, item.y - item.radius * 1.02f)
+                                        drawLine(Color(0xFFFFD7A1), fuseStart, fuseEnd, strokeWidth = 4f, cap = StrokeCap.Round)
+                                        drawCircle(Color(0xFFFFE082), 4.2f, fuseEnd)
+                                        drawLine(Color.White.copy(alpha = 0.9f),
+                                            Offset(item.x - item.radius * 0.28f, item.y),
+                                            Offset(item.x + item.radius * 0.28f, item.y),
+                                            strokeWidth = 3f, cap = StrokeCap.Round)
+                                        drawLine(Color.White.copy(alpha = 0.9f),
+                                            Offset(item.x, item.y - item.radius * 0.28f),
+                                            Offset(item.x, item.y + item.radius * 0.28f),
+                                            strokeWidth = 3f, cap = StrokeCap.Round)
+                                    }
+                                    ItemKind.GOLD -> {
+                                        val path = Path()
+                                        val outer = item.radius * 0.43f
+                                        val inner = outer * 0.46f
+                                        for (i in 0 until 10) {
+                                            val angle = -PI / 2.0 + i * PI / 5.0
+                                            val r = if (i % 2 == 0) outer else inner
+                                            val px = item.x + cos(angle).toFloat() * r
+                                            val py = item.y + sin(angle).toFloat() * r
+                                            if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                                        }
+                                        path.close()
+                                        drawPath(path, Color(0xFFFFF4B0))
+                                    }
+                                    ItemKind.SLOW -> {
+                                        drawCircle(Color.White.copy(alpha = 0.9f), item.radius * 0.48f,
+                                            center, style = Stroke(width = 2.4f))
+                                        drawLine(Color.White, center,
+                                            Offset(item.x, item.y - item.radius * 0.28f),
+                                            strokeWidth = 2.5f, cap = StrokeCap.Round)
+                                        drawLine(Color.White, center,
+                                            Offset(item.x + item.radius * 0.23f, item.y + item.radius * 0.10f),
+                                            strokeWidth = 2.5f, cap = StrokeCap.Round)
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(Color(0xEE17172F), Color(0xEE202044), Color(0xEE17172F))
-                                )
-                            )
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                if (!paused && !gameOver) {
+                    Button(
+                        onClick = { paused = true },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252545))
                     ) {
-                        Column {
-                            Text("СЧЁТ", color = Color(0xFF9BA4C7), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text("$score", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black)
-                            Text("РЕКОРД: $bestScore", color = Color(0xFFFFD700), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("УРОВЕНЬ $level", color = Color(0xFF00E5FF), fontSize = 12.sp, fontWeight = FontWeight.Black)
-                            Spacer(Modifier.height(4.dp))
-                            Text("❤️".repeat(lives), fontSize = 18.sp)
-                        }
-                    }
-                    if (slowSeconds > 0f) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("⏳ ВРЕМЯ ЗАМЕДЛЕНО", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Black)
+                        Text("⏸ Пауза", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -489,15 +497,6 @@ private fun CatchGameApp() {
                     OverlayPanel("ИГРА ОКОНЧЕНА", "Результат: $score | Рекорд: $bestScore") {
                         MenuButton("Играть снова", "↻") { startGame() }
                         MenuButton("Главное меню", "⌂") { screen = GameScreen.MENU }
-                    }
-                } else {
-                    Button(
-                        onClick = { paused = true },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252545))
-                    ) {
-                        Text("⏸ Пауза", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
