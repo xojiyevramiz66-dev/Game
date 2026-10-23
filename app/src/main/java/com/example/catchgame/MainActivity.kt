@@ -241,7 +241,7 @@ private fun CatchGameApp() {
                         val screenWidth = constraints.maxWidth.toFloat()
                         val screenHeight = constraints.maxHeight.toFloat()
                         val stars = remember(screenWidth, screenHeight) {
-                            List(50) { // Уменьшили количество фоновых звезд для снижения нагрузки на GPU
+                            List(50) {
                                 Star(
                                     x = Random.nextFloat() * screenWidth.coerceAtLeast(1f),
                                     y = Random.nextFloat() * screenHeight.coerceAtLeast(1f),
@@ -296,7 +296,6 @@ private fun CatchGameApp() {
 
                                     val timeScale = if (currentSlowSeconds > 0f) 0.38f else 1f
                                     
-                                    // Быстрое обновление позиций без задержек сборщика мусора
                                     val updatedList = items.mapNotNull { item ->
                                         val newY = item.y + item.speed * timeScale * frameScale
                                         if (newY > screenHeight + item.radius * 2) {
@@ -363,7 +362,6 @@ private fun CatchGameApp() {
                                     ItemKind.SLOW -> Color(0xFF00D9FF)
                                 }
 
-                                // Оптимизированный радиальный градиент шара
                                 drawCircle(
                                     brush = Brush.radialGradient(
                                         colors = listOf(
@@ -567,7 +565,7 @@ private fun SettingToggle(title: String, checked: Boolean, onCheckedChange: (Boo
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(title, color = Color.White, fontSize: 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
