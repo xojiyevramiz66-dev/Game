@@ -228,7 +228,6 @@ private fun CatchGameApp() {
                         val screenWidth = constraints.maxWidth.toFloat()
                         val screenHeight = constraints.maxHeight.toFloat()
                         
-                        // Статичные звезды без мерцания (убирает расчеты в каждом кадре)
                         val stars = remember(screenWidth, screenHeight) {
                             List(20) {
                                 Star(
@@ -239,7 +238,6 @@ private fun CatchGameApp() {
                             }
                         }
 
-                        // Игровой цикл на VSYNC через withFrameNanos
                         LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
                             if (screen == GameScreen.GAME && !paused && !gameOver &&
                                 screenWidth > 0f && screenHeight > 0f
@@ -254,7 +252,6 @@ private fun CatchGameApp() {
 
                                     val activeLevel = currentScore / 10 + 1
 
-                                    // Жесткое ограничение: не больше 22 шаров одновременно, чтобы игра не лагала
                                     val spawnChance = if (items.size < 22) {
                                         val spawnRate = 2.0f * (1f + (activeLevel - 1) * 0.04f)
                                         (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.12f)
@@ -289,16 +286,16 @@ private fun CatchGameApp() {
 
                                     val timeScale = if (currentSlowSeconds > 0f) 0.38f else 1f
                                     
-                                    val iterator = items.listIterator()
-                                    while (iterator.hasNext()) {
-                                        val item = iterator.next()
+                                    val updatedList = items.mapNotNull { item ->
                                         val newY = item.y + item.speed * timeScale * (deltaSeconds / 0.025f)
                                         if (newY > screenHeight + item.radius * 2) {
-                                            iterator.remove()
+                                            null
                                         } else {
-                                            item.y = newY
+                                            item.copy(y = newY)
                                         }
                                     }
+                                    items.clear()
+                                    items.addAll(updatedList)
 
                                     if (currentSlowSeconds > 0f) {
                                         slowSeconds = (currentSlowSeconds - deltaSeconds).coerceAtLeast(0f)
