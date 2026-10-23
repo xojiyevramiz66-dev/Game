@@ -95,12 +95,11 @@ private fun CatchGameApp() {
     var vibrationOn by remember {
         mutableStateOf(prefs.getBoolean("vibration_on", true))
     }
-    var items by remember {
-        mutableStateOf<List<FallingItem>>(emptyList())
-    }
+
+    // Используем mutableStateListOf для мгновенного изменения состояния без задержек рендеринга
+    val items = remember { mutableStateListOf<FallingItem>() }
     var nextItemId by remember { mutableIntStateOf(0) }
 
-    val currentItems by rememberUpdatedState(items)
     val currentScreen by rememberUpdatedState(screen)
     val currentPaused by rememberUpdatedState(paused)
     val currentGameOver by rememberUpdatedState(gameOver)
@@ -149,7 +148,7 @@ private fun CatchGameApp() {
         score = 0
         lives = 3
         slowSeconds = 0f
-        items = emptyList()
+        items.clear()
         nextItemId = 0
         gameOver = false
         paused = false
@@ -242,7 +241,6 @@ private fun CatchGameApp() {
                     ) {
                         val screenWidth = constraints.maxWidth.toFloat()
                         val screenHeight = constraints.maxHeight.toFloat()
-                        val transition = rememberInfiniteTransition(label = "visual-effects")
                         val stars = remember(screenWidth, screenHeight) {
                             List(72) {
                                 Star(
@@ -271,7 +269,6 @@ private fun CatchGameApp() {
                                     val activeLevel = currentScore / 10 + 1
                                     val spawnRate = 3.4f * (1f + (activeLevel - 1) * 0.09f)
                                     val spawnChance = (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.24f)
-                                    val updatedItems = currentItems.toMutableList()
 
                                     if (Random.nextFloat() < spawnChance) {
                                         val radius = 40f
@@ -285,7 +282,9 @@ private fun CatchGameApp() {
                                         }
                                         val levelBonus = ((activeLevel - 1) * 0.3f).coerceAtMost(6f)
                                         val speed = Random.nextFloat() * 2.5f + 3.5f + levelBonus
-                                        updatedItems.add(
+                                        
+                                        // Безопасное добавление через mutableStateListOf
+                                        items.add(
                                             FallingItem(
                                                 id = nextItemId++,
                                                 x = Random.nextFloat() * maxX + radius,
@@ -298,11 +297,19 @@ private fun CatchGameApp() {
                                     }
 
                                     val timeScale = if (currentSlowSeconds > 0f) 0.38f else 1f
-                                    items = updatedItems.mapNotNull { item ->
+                                    
+                                    // Обновляем позиции существующих элементов «на месте»
+                                    val iterator = items.listIterator()
+                                    while (iterator.hasNext()) {
+                                        val item = iterator.next()
                                         val newY = item.y + item.speed * timeScale * frameScale
-                                        if (newY > screenHeight + item.radius * 2) null
-                                        else item.copy(y = newY)
+                                        if (newY > screenHeight + item.radius * 2) {
+                                            iterator.remove()
+                                        } else {
+                                            iterator.set(item.copy(y = newY))
+                                        }
                                     }
+
                                     if (currentSlowSeconds > 0f) {
                                         slowSeconds = (currentSlowSeconds - deltaSeconds).coerceAtLeast(0f)
                                     }
@@ -316,19 +323,17 @@ private fun CatchGameApp() {
                                     if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) {
                                         return@detectTapGestures
                                     }
-                                    val hit = currentItems.filter { item ->
+                                    
+                                    // Ищем шар по обратном порядку (сверху) с огромным радиусом захвата 85f
+                                    val hit = items.asReversed().firstOrNull { item ->
                                         val dx = tap.x - item.x
                                         val dy = tap.y - item.y
-                                        val hitRadius = item.radius + 70f
+                                        val hitRadius = item.radius + 85f
                                         dx * dx + dy * dy <= hitRadius * hitRadius
-                                    }.minByOrNull { item ->
-                                        val dx = tap.x - item.x
-                                        val dy = tap.y - item.y
-                                        dx * dx + dy * dy
                                     }
 
                                     if (hit != null) {
-                                        items = currentItems.filterNot { it.id == hit.id }
+                                        items.remove(hit) // Мгновенное удаление объекта из списка
                                         when (hit.kind) {
                                             ItemKind.BOMB -> {
                                                 lives = (lives - 1).coerceAtLeast(0)
@@ -380,9 +385,6 @@ private fun CatchGameApp() {
                                     ItemKind.SLOW -> Color(0xFF00D9FF)
                                 }
 
-                                // ТЕНИ И ОРЕОЛЫ ПОЛНОСТЬЮ УДАЛЕНЫ
-
-                                // Сама сфера шарика
                                 drawCircle(
                                     brush = Brush.radialGradient(
                                         colors = listOf(
