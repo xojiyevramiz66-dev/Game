@@ -5,7 +5,6 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.activity.ComponentActivity
@@ -37,7 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.withFrameNanos
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
@@ -241,7 +240,7 @@ private fun CatchGameApp() {
                         val screenWidth = constraints.maxWidth.toFloat()
                         val screenHeight = constraints.maxHeight.toFloat()
                         val stars = remember(screenWidth, screenHeight) {
-                            List(35) { // Оптимизировано для максимальной производительности
+                            List(35) {
                                 Star(
                                     x = Random.nextFloat() * screenWidth.coerceAtLeast(1f),
                                     y = Random.nextFloat() * screenHeight.coerceAtLeast(1f),
@@ -252,27 +251,28 @@ private fun CatchGameApp() {
                         }
                         var visualTime by remember { mutableFloatStateOf(0f) }
 
+                        // Игровой цикл на базе точного системного таймера VSYNC (withFrameNanos)
                         LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
                             if (screen == GameScreen.GAME && !paused && !gameOver &&
                                 screenWidth > 0f && screenHeight > 0f
                             ) {
-                                var previousFrameMs = SystemClock.elapsedRealtime()
+                                var previousFrameNanos = System.nanoTime()
                                 while (true) {
-                                    delay(16L)
+                                    val frameTimeNanos = withFrameNanos { it }
                                     if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) break
-                                    val nowMs = SystemClock.elapsedRealtime()
-                                    val deltaSeconds = ((nowMs - previousFrameMs) / 1000f).coerceIn(0f, 0.05f)
-                                    previousFrameMs = nowMs
+
+                                    val deltaSeconds = ((frameTimeNanos - previousFrameNanos) / 1_000_000_000f).coerceIn(0f, 0.05f)
+                                    previousFrameNanos = frameTimeNanos
                                     visualTime += deltaSeconds
+
                                     val frameScale = deltaSeconds / 0.025f
                                     val activeLevel = currentScore / 10 + 1
 
-                                    // Ограничиваем максимальное число шаров на экране (не более 30 штук), чтобы не было лагов
-                                    val spawnChance = if (items.size < 30) {
-                                        val spawnRate = 2.5f * (1f + (activeLevel - 1) * 0.05f)
-                                        (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.18f)
+                                    val spawnChance = if (items.size < 28) {
+                                        val spawnRate = 2.4f * (1f + (activeLevel - 1) * 0.05f)
+                                        (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.16f)
                                     } else {
-                                        0f // Прекращаем спавн новых, пока игрок не начнет их лопать
+                                        0f
                                     }
 
                                     if (Random.nextFloat() < spawnChance) {
