@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF0F0F1A)
+                    color = Color(0xFF070710)
                 ) {
                     CatchGameApp()
                 }
@@ -57,6 +57,16 @@ private data class FallingItem(
     val radius: Float,
     val kind: ItemKind,
     val speed: Float
+)
+
+// Эффект всплывающего текста при клике (очки / урон)
+private data class FloatingText(
+    val id: Int,
+    val text: String,
+    val color: Color,
+    var x: Float,
+    var y: Float,
+    var alpha: Float = 1f
 )
 
 @Composable
@@ -78,7 +88,9 @@ private fun CatchGameApp() {
     var vibrationOn by remember { mutableStateOf(prefs.getBoolean("vibration_on", true)) }
 
     var items by remember { mutableStateOf<List<FallingItem>>(emptyList()) }
+    var floatingTexts by remember { mutableStateOf<List<FloatingText>>(emptyList()) }
     var nextItemId by remember { mutableIntStateOf(0) }
+    var nextTextId by remember { mutableIntStateOf(0) }
 
     val currentItems by rememberUpdatedState(items)
     val currentScreen by rememberUpdatedState(screen)
@@ -105,8 +117,8 @@ private fun CatchGameApp() {
     fun feedback(isBomb: Boolean = false) {
         if (currentSoundOn) {
             try {
-                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 85)
-                tone.startTone(if (isBomb) ToneGenerator.TONE_PROP_NACK else ToneGenerator.TONE_PROP_BEEP, 100)
+                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 90)
+                tone.startTone(if (isBomb) ToneGenerator.TONE_PROP_NACK else ToneGenerator.TONE_PROP_BEEP, 90)
                 tone.release()
             } catch (_: Exception) {}
         }
@@ -114,9 +126,9 @@ private fun CatchGameApp() {
             try {
                 val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
                 if (vibrator.hasVibrator()) {
-                    val duration = if (isBomb) 180L else 45L
+                    val duration = if (isBomb) 200L else 40L
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        vibrator.vibrate(VibrationEffect.createOneShot(duration, if (isBomb) 200 else 80))
+                        vibrator.vibrate(VibrationEffect.createOneShot(duration, if (isBomb) 255 else 90))
                     } else {
                         @Suppress("DEPRECATION")
                         vibrator.vibrate(duration)
@@ -132,6 +144,7 @@ private fun CatchGameApp() {
         combo = 0
         slowTicks = 0
         items = emptyList()
+        floatingTexts = emptyList()
         nextItemId = 0
         gameOver = false
         paused = false
@@ -141,32 +154,31 @@ private fun CatchGameApp() {
     when (screen) {
         GameScreen.MENU -> {
             GamePanel(
-                title = "CATCH GAME 4K",
-                subtitle = "Ультра-чёткий ловчий азарт!"
+                title = "CATCH GAME ULTRA",
+                subtitle = "Кибернетический аркадный экшен"
             ) {
                 MenuButton("Играть", "▶") { startGame() }
                 MenuButton("Рекорды", "🏆") { screen = GameScreen.RECORDS }
                 MenuButton("Настройки", "⚙") { screen = GameScreen.SETTINGS }
                 Spacer(Modifier.height(16.dp))
-                Text("🟡 Золото даёт +5 и бонус комбо", color = Color(0xFFFFD700), fontSize = 14.sp)
-                Text("🔵 Замедление замораживает время", color = Color(0xFF00E5FF), fontSize = 14.sp)
+                Text("✨ Золото: +очки | 🔵 Время: замедление", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }
         GameScreen.RECORDS -> {
-            GamePanel(title = "РЕКОРДЫ", subtitle = "Зафиксированные достижения") {
+            GamePanel(title = "РЕКОРДЫ", subtitle = "Ваши высшие достижения") {
                 InfoCard("Лучший счёт", "$bestScore очков", "🏆")
-                InfoCard("Макс. комбо", "$bestCombo подряд", "🔥")
+                InfoCard("Максимальное комбо", "$bestCombo подряд", "🔥")
                 Spacer(Modifier.height(16.dp))
                 MenuButton("Назад", "←") { screen = GameScreen.MENU }
             }
         }
         GameScreen.SETTINGS -> {
-            GamePanel(title = "НАСТРОЙКИ", subtitle = "Параметры обратной связи") {
+            GamePanel(title = "НАСТРОЙКИ", subtitle = "Аудио и тактильный отклик") {
                 SettingToggle("Звуковые эффекты", soundOn) { enabled ->
                     soundOn = enabled
                     prefs.edit().putBoolean("sound_on", enabled).apply()
                 }
-                SettingToggle("Вибрация Haptic", vibrationOn) { enabled ->
+                SettingToggle("Haptic Вибрация", vibrationOn) { enabled ->
                     vibrationOn = enabled
                     prefs.edit().putBoolean("vibration_on", enabled).apply()
                 }
@@ -180,19 +192,20 @@ private fun CatchGameApp() {
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color(0xFF0B0B1A), Color(0xFF16162E))
+                            colors = listOf(Color(0xFF05050C), Color(0xFF0F0F1E), Color(0xFF1A1A3A))
                         )
                     )
             ) {
                 val screenWidth = constraints.maxWidth.toFloat()
                 val screenHeight = constraints.maxHeight.toFloat()
 
+                // Пульсация для Ultra HD элементов
                 val infiniteTransition = rememberInfiniteTransition(label = "pulse")
                 val pulseScale by infiniteTransition.animateFloat(
                     initialValue = 1f,
-                    targetValue = 1.15f,
+                    targetValue = 1.2f,
                     animationSpec = infiniteRepeatable(
-                        animation = tween(800, easing = LinearEasing),
+                        animation = tween(700, easing = FastOutSlowInEasing),
                         repeatMode = RepeatMode.Reverse
                     ),
                     label = "pulseScale"
@@ -201,42 +214,49 @@ private fun CatchGameApp() {
                 LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
                     if (screen == GameScreen.GAME && !paused && !gameOver && screenWidth > 0f && screenHeight > 0f) {
                         while (true) {
-                            delay(33L)
+                            delay(25L) // Высокая частота кадров (~40 fps) для плавности
                             if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) break
 
                             val activeLevel = currentScore / 10 + 1
-                            val spawnChance = (0.07f + activeLevel * 0.008f).coerceAtMost(0.22f)
-                            val updated = currentItems.toMutableList()
+                            val spawnChance = (0.075f + activeLevel * 0.007f).coerceAtMost(0.24f)
+                            val updatedItems = currentItems.toMutableList()
 
                             if (Random.nextFloat() < spawnChance) {
-                                val radius = 38f
+                                val radius = 40f
                                 val maxX = (screenWidth - radius * 2).coerceAtLeast(0f)
                                 val roll = Random.nextFloat()
                                 val kind = when {
-                                    roll < 0.16f -> ItemKind.BOMB
-                                    roll < 0.28f -> ItemKind.GOLD
-                                    roll < 0.35f -> ItemKind.SLOW
+                                    roll < 0.15f -> ItemKind.BOMB
+                                    roll < 0.27f -> ItemKind.GOLD
+                                    roll < 0.34f -> ItemKind.SLOW
                                     else -> ItemKind.NORMAL
                                 }
-                                val levelBonus = ((activeLevel - 1) * 0.35f).coerceAtMost(7f)
-                                val speed = Random.nextFloat() * 2.2f + 3.2f + levelBonus
+                                val levelBonus = ((activeLevel - 1) * 0.3f).coerceAtMost(6f)
+                                val speed = Random.nextFloat() * 2.5f + 3.5f + levelBonus
 
-                                updated.add(
+                                updatedItems.add(
                                     FallingItem(
                                         id = nextItemId++,
                                         x = Random.nextFloat() * maxX + radius,
                                         y = -radius,
-                                        radius = if (kind == ItemKind.GOLD) 32f else radius,
+                                        radius = if (kind == ItemKind.GOLD) 34f else radius,
                                         kind = kind,
                                         speed = speed
                                     )
                                 )
                             }
 
-                            val timeScale = if (currentSlowTicks > 0) 0.4f else 1f
-                            items = updated.mapNotNull { item ->
+                            val timeScale = if (currentSlowTicks > 0) 0.38f else 1f
+                            items = updatedItems.mapNotNull { item ->
                                 val newY = item.y + item.speed * timeScale
                                 if (newY > screenHeight + item.radius * 2) null else item.copy(y = newY)
+                            }
+
+                            // Анимация всплывающих текстов
+                            floatingTexts = floatingTexts.mapNotNull { ft ->
+                                val newY = ft.y - 3f
+                                val newAlpha = ft.alpha - 0.035f
+                                if (newAlpha <= 0f) null else ft.copy(y = newY, alpha = newAlpha)
                             }
 
                             if (currentSlowTicks > 0) {
@@ -256,7 +276,7 @@ private fun CatchGameApp() {
                                 val hit = currentItems.asReversed().firstOrNull { item ->
                                     val dx = tap.x - item.x
                                     val dy = tap.y - item.y
-                                    val hitRadius = item.radius + 32f
+                                    val hitRadius = item.radius + 36f
                                     dx * dx + dy * dy <= hitRadius * hitRadius
                                 }
 
@@ -267,26 +287,34 @@ private fun CatchGameApp() {
                                             lives = (lives - 1).coerceAtLeast(0)
                                             combo = 0
                                             feedback(isBomb = true)
+                                            floatingTexts = floatingTexts + FloatingText(nextTextId++, "-1 Жизнь", Color(0xFFFF3366), hit.x, hit.y)
                                             if (lives == 0) gameOver = true
                                         }
                                         ItemKind.GOLD -> {
                                             combo += 1
                                             bestCombo = maxOf(bestCombo, combo)
-                                            score += 5 + combo / 5
+                                            val pts = 5 + combo / 5
+                                            score += pts
                                             feedback()
+                                            floatingTexts = floatingTexts + FloatingText(nextTextId++, "+$pts Золото!", Color(0xFFFFD700), hit.x, hit.y)
                                         }
                                         ItemKind.SLOW -> {
                                             combo += 1
                                             bestCombo = maxOf(bestCombo, combo)
                                             score += 2
-                                            slowTicks = 110
+                                            slowTicks = 120
                                             feedback()
+                                            floatingTexts = floatingTexts + FloatingText(nextTextId++, "⏳ Замедление", Color(0xFF00E5FF), hit.x, hit.y)
                                         }
                                         ItemKind.NORMAL -> {
                                             combo += 1
                                             bestCombo = maxOf(bestCombo, combo)
-                                            score += if (combo % 5 == 0) 4 else 1
+                                            val pts = if (combo % 5 == 0) 4 else 1
+                                            score += pts
                                             feedback()
+                                            if (pts > 1) {
+                                                floatingTexts = floatingTexts + FloatingText(nextTextId++, "+$pts Комбо!", Color(0xFFFF9100), hit.x, hit.y)
+                                            }
                                         }
                                     }
                                 } else {
@@ -295,39 +323,44 @@ private fun CatchGameApp() {
                             }
                         }
                 ) {
+                    // 1. Отрисовка падающих объектов с Ultra HD градиентами и свечением
                     items.forEach { item ->
                         val center = Offset(item.x, item.y)
                         val mainColor = when (item.kind) {
                             ItemKind.NORMAL -> Color(0xFFFFCC00)
-                            ItemKind.BOMB -> Color(0xFFFF3366)
+                            ItemKind.BOMB -> Color(0xFFFF2255)
                             ItemKind.GOLD -> Color(0xFFFFD700)
                             ItemKind.SLOW -> Color(0xFF00E5FF)
                         }
 
+                        // Неоновое свечение (Bloom)
                         drawCircle(
-                            color = mainColor.copy(alpha = 0.25f),
-                            radius = item.radius * 1.55f * (if (item.kind == ItemKind.GOLD) pulseScale else 1f),
+                            color = mainColor.copy(alpha = 0.3f),
+                            radius = item.radius * 1.6f * (if (item.kind == ItemKind.GOLD) pulseScale else 1f),
                             center = center
                         )
 
+                        // Объемный радиальный градиент
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(Color.White, mainColor, mainColor.copy(alpha = 0.8f)),
+                                colors = listOf(Color.White, mainColor, mainColor.copy(alpha = 0.7f)),
                                 center = Offset(item.x - item.radius * 0.3f, item.y - item.radius * 0.3f),
-                                radius = item.radius * 1.2f
+                                radius = item.radius * 1.3f
                             ),
                             radius = item.radius,
                             center = center
                         )
 
+                        // Блик высокой четкости
                         drawCircle(
-                            color = Color.White.copy(alpha = 0.75f),
+                            color = Color.White.copy(alpha = 0.8f),
                             radius = item.radius * 0.28f,
                             center = Offset(item.x - item.radius * 0.35f, item.y - item.radius * 0.35f)
                         )
                     }
                 }
 
+                // Верхняя панель HUD
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -336,20 +369,20 @@ private fun CatchGameApp() {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF1E1E36).copy(alpha = 0.85f))
-                            .padding(16.dp),
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFF14142B).copy(alpha = 0.9f))
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("СЧЁТ", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text("$score", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                            Text("РЕКОРД: $bestScore", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("СЧЁТ", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("$score", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                            Text("РЕКОРД: $bestScore", color = Color(0xFFFFD700), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text("УРОВЕНЬ $level", color = Color(0xFF00E5FF), fontSize = 12.sp, fontWeight = FontWeight.Black)
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text("❤️".repeat(lives), fontSize = 18.sp)
                         }
                     }
@@ -361,23 +394,24 @@ private fun CatchGameApp() {
                                 Text("🔥 КОМБО x$combo", color = Color(0xFFFF9100), fontSize = 13.sp, fontWeight = FontWeight.Black)
                             }
                             if (slowTicks > 0) {
-                                Text("⏳ ЗАМЕДЛЕНИЕ", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Black)
+                                Text("⏳ ВРЕМЯ ЗАМЕДЛЕНО", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
                 }
 
+                // Пауза / Экран завершения игры
                 if (paused && !gameOver) {
-                    OverlayPanel(title = "ПАУЗА", subtitle = "Игра на паузе") {
+                    OverlayPanel(title = "ПАУЗА", subtitle = "Игра приостановлена") {
                         MenuButton("Продолжить", "▶") { paused = false }
-                        MenuButton("Перезапустить", "↻") { startGame() }
-                        MenuButton("Главное меню", "⌂") {
+                        MenuButton("Заново", "↻") { startGame() }
+                        MenuButton("В меню", "⌂") {
                             paused = false
                             screen = GameScreen.MENU
                         }
                     }
                 } else if (gameOver) {
-                    OverlayPanel(title = "ИГРА ОКОНЧЕНА", subtitle = "Итоговый счёт: $score | Макс. комбо: $bestCombo") {
+                    OverlayPanel(title = "ИГРА ОКОНЧЕНА", subtitle = "Ваш результат: $score | Рекорд: $bestScore") {
                         MenuButton("Играть снова", "↻") { startGame() }
                         MenuButton("Главное меню", "⌂") { screen = GameScreen.MENU }
                     }
@@ -387,8 +421,8 @@ private fun CatchGameApp() {
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(20.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B2B4A))
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF252545))
                     ) {
                         Text("⏸ Пауза", color = Color.White, fontWeight = FontWeight.Bold)
                     }
@@ -409,7 +443,7 @@ private fun GamePanel(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(Color(0xFF0A0A14), Color(0xFF18182E))
+                    colors = listOf(Color(0xFF04040A), Color(0xFF121226))
                 )
             )
             .padding(24.dp),
@@ -418,14 +452,14 @@ private fun GamePanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF16162B).copy(alpha = 0.9f))
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xFF14142B).copy(alpha = 0.92f))
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(title, color = Color(0xFFFFD700), fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Text(title, color = Color(0xFFFFD700), fontSize = 26.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(4.dp))
-            Text(subtitle, color = Color.Gray, fontSize = 14.sp)
+            Text(subtitle, color = Color.Gray, fontSize = 13.sp)
             Spacer(Modifier.height(24.dp))
             content()
         }
@@ -440,16 +474,16 @@ private fun MenuButton(label: String, symbol: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .height(54.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D2D4A))
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF242442))
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(symbol, fontSize = 20.sp, color = Color(0xFFFFD700))
-            Spacer(Modifier.width(12.dp))
+            Text(symbol, fontSize = 18.sp, color = Color(0xFFFFD700))
+            Spacer(Modifier.width(14.dp))
             Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
@@ -461,8 +495,8 @@ private fun InfoCard(title: String, value: String, symbol: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF22223D))
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C36))
     ) {
         Row(
             modifier = Modifier
@@ -486,8 +520,8 @@ private fun SettingToggle(title: String, checked: Boolean, onCheckedChange: (Boo
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF22223D))
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C36))
     ) {
         Row(
             modifier = Modifier
@@ -515,21 +549,21 @@ private fun OverlayPanel(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f)),
+            .background(Color.Black.copy(alpha = 0.88f)),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF16162B))
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xFF14142B))
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(4.dp))
-            Text(subtitle, color = Color.Gray, fontSize = 14.sp)
+            Text(subtitle, color = Color.Gray, fontSize = 13.sp)
             Spacer(Modifier.height(20.dp))
             content()
         }
