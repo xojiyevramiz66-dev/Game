@@ -175,7 +175,6 @@ private fun CatchGameApp() {
                     )
                 )
             ) {
-                // Нативный фоновый SurfaceView движок для абсолютной плавности 60/120 FPS
                 AndroidView(
                     factory = { ctx ->
                         GameSurfaceView(ctx).apply {
@@ -188,7 +187,7 @@ private fun CatchGameApp() {
                             onFeedback = { isBomb -> feedback(isBomb) }
                             getLevel = { score / 10 + 1 }
                             isPaused = { paused }
-                            isGameOver = { getGameOver -> gameOver }
+                            isGameOver = { gameOver } // Исправлено: убран аргумент
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -254,7 +253,6 @@ private fun CatchGameApp() {
     }
 }
 
-// Нативный высокопроизводительный SurfaceView для обработки аркады без лагов
 class GameSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Callback, Runnable {
     private var thread: Thread? = null
     private var running = false
@@ -392,7 +390,6 @@ class GameSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Ca
                 }
             }
 
-            // Отрисовка на холсте SurfaceView
             val canvas = holder.lockCanvas()
             if (canvas != null) {
                 canvas.drawColor(AndroidColor.rgb(3, 3, 11))
@@ -406,7 +403,6 @@ class GameSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Ca
                             ItemKind.SLOW -> AndroidColor.rgb(0, 217, 255)
                         }
 
-                        // Рисуем чистый шар без тяжелых теней
                         paint.shader = RadialGradient(
                             item.x - item.radius * 0.34f, item.y - item.radius * 0.38f,
                             item.radius * 1.48f,
@@ -417,14 +413,12 @@ class GameSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Ca
                         canvas.drawCircle(item.x, item.y, item.radius, paint)
                         paint.shader = null
 
-                        // Обводка шара
                         paint.color = color
                         paint.style = Paint.Style.STROKE
                         paint.strokeWidth = 1.7f
                         canvas.drawCircle(item.x, item.y, item.radius, paint)
                         paint.style = Paint.Style.FILL
 
-                        // Блик
                         paint.color = AndroidColor.argb(220, 255, 255, 255)
                         canvas.drawCircle(item.x - item.radius * 0.34f, item.y - item.radius * 0.38f, item.radius * 0.20f, paint)
                     }
@@ -434,7 +428,7 @@ class GameSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Ca
             }
 
             try {
-                Thread.sleep(14L) // Стабильная поддержка ~60 FPS без нагрузки
+                Thread.sleep(14L)
             } catch (_: InterruptedException) { }
         }
     }
