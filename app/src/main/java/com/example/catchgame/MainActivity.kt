@@ -1,3 +1,4 @@
+
 package com.example.catchgame
 
 import android.content.Context
@@ -95,7 +96,6 @@ private fun CatchGameApp() {
 
     var lives by remember { mutableIntStateOf(3) }
 
-    // Оставшееся время замедления в секундах.
     var slowSeconds by remember {
         mutableFloatStateOf(0f)
     }
@@ -119,7 +119,6 @@ private fun CatchGameApp() {
         mutableIntStateOf(0)
     }
 
-    // Актуальные значения для игрового цикла и касаний.
     val currentItems by rememberUpdatedState(items)
     val currentScreen by rememberUpdatedState(screen)
     val currentPaused by rememberUpdatedState(paused)
@@ -131,7 +130,6 @@ private fun CatchGameApp() {
 
     val level = score / 10 + 1
 
-    // Сохраняем новый рекорд.
     LaunchedEffect(score) {
         if (score > bestScore) {
             bestScore = score
@@ -159,7 +157,8 @@ private fun CatchGameApp() {
                 )
 
                 tone.release()
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
 
         if (currentVibrationOn) {
@@ -184,7 +183,8 @@ private fun CatchGameApp() {
                         vibrator.vibrate(duration)
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -343,7 +343,8 @@ private fun CatchGameApp() {
                                 break
                             }
 
-                            val nowMs = SystemClock.elapsedRealtime()
+                            val nowMs =
+                                SystemClock.elapsedRealtime()
 
                             val deltaSeconds = (
                                 (nowMs - previousFrameMs) / 1000f
@@ -451,16 +452,21 @@ private fun CatchGameApp() {
                                     return@detectTapGestures
                                 }
 
-                                // Увеличенный hitRadius (item.radius + 70f) для мгновенного отклика
+                                // Исправленный поиск:
+                                // выбираем ближайший шарик в области касания.
                                 val hit = currentItems
-                                    .asReversed()
-                                    .firstOrNull { item ->
+                                    .filter { item ->
                                         val dx = tap.x - item.x
                                         val dy = tap.y - item.y
-                                        val hitRadius = item.radius + 70f
+                                        val hitRadius = item.radius + 12f
 
                                         dx * dx + dy * dy <=
                                             hitRadius * hitRadius
+                                    }
+                                    .minByOrNull { item ->
+                                        val dx = tap.x - item.x
+                                        val dy = tap.y - item.y
+                                        dx * dx + dy * dy
                                     }
 
                                 if (hit != null) {
