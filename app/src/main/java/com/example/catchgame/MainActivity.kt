@@ -158,13 +158,8 @@ private fun CatchGameApp() {
                     if (isBomb) 140 else 70
                 )
 
-                // Освобождаем аудиоресурс после короткого звука.
-                // Звук запускается перед освобождением генератора.
                 tone.release()
-            } catch (_: Exception) {
-                // Игра должна продолжать работать,
-                // даже если звук недоступен.
-            }
+            } catch (_: Exception) {}
         }
 
         if (currentVibrationOn) {
@@ -189,9 +184,7 @@ private fun CatchGameApp() {
                         vibrator.vibrate(duration)
                     }
                 }
-            } catch (_: Exception) {
-                // Отсутствие вибрации не должно ломать игру.
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -322,13 +315,6 @@ private fun CatchGameApp() {
                     label = "pulseScale"
                 )
 
-                /*
-                 * Игровой цикл:
-                 * - обновляется примерно каждые 16 мс;
-                 * - скорость зависит от прошедшего времени;
-                 * - большой скачок времени ограничивается 50 мс;
-                 * - таймер замедления измеряется в секундах.
-                 */
                 LaunchedEffect(
                     screen,
                     paused,
@@ -365,15 +351,11 @@ private fun CatchGameApp() {
 
                             previousFrameMs = nowMs
 
-                            // Раньше один шаг происходил каждые 25 мс.
-                            // Этот множитель сохраняет близкую скорость.
                             val frameScale = deltaSeconds / 0.025f
 
                             val activeLevel =
                                 currentScore / 10 + 1
 
-                            // Частота появления объектов зависит от времени,
-                            // а не от количества итераций цикла.
                             val spawnRate = 3.4f *
                                 (1f + (activeLevel - 1) * 0.09f)
 
@@ -469,14 +451,13 @@ private fun CatchGameApp() {
                                     return@detectTapGestures
                                 }
 
-                                // Сначала проверяем верхний объект,
-                                // если объекты визуально перекрываются.
+                                // Увеличенный hitRadius (item.radius + 70f) для мгновенного отклика
                                 val hit = currentItems
                                     .asReversed()
                                     .firstOrNull { item ->
                                         val dx = tap.x - item.x
                                         val dy = tap.y - item.y
-                                        val hitRadius = item.radius + 36f
+                                        val hitRadius = item.radius + 70f
 
                                         dx * dx + dy * dy <=
                                             hitRadius * hitRadius
@@ -507,10 +488,7 @@ private fun CatchGameApp() {
 
                                         ItemKind.SLOW -> {
                                             score += 2
-
-                                            // Три секунды замедления.
                                             slowSeconds = 3f
-
                                             feedback()
                                         }
 
