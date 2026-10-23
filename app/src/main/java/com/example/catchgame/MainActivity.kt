@@ -241,11 +241,11 @@ private fun CatchGameApp() {
                         val screenWidth = constraints.maxWidth.toFloat()
                         val screenHeight = constraints.maxHeight.toFloat()
                         val stars = remember(screenWidth, screenHeight) {
-                            List(50) {
+                            List(35) { // Оптимизировано для максимальной производительности
                                 Star(
                                     x = Random.nextFloat() * screenWidth.coerceAtLeast(1f),
                                     y = Random.nextFloat() * screenHeight.coerceAtLeast(1f),
-                                    radius = Random.nextFloat() * 1.8f + 0.35f,
+                                    radius = Random.nextFloat() * 1.5f + 0.3f,
                                     phase = Random.nextFloat() * 6.28f
                                 )
                             }
@@ -266,8 +266,14 @@ private fun CatchGameApp() {
                                     visualTime += deltaSeconds
                                     val frameScale = deltaSeconds / 0.025f
                                     val activeLevel = currentScore / 10 + 1
-                                    val spawnRate = 3.4f * (1f + (activeLevel - 1) * 0.09f)
-                                    val spawnChance = (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.24f)
+
+                                    // Ограничиваем максимальное число шаров на экране (не более 30 штук), чтобы не было лагов
+                                    val spawnChance = if (items.size < 30) {
+                                        val spawnRate = 2.5f * (1f + (activeLevel - 1) * 0.05f)
+                                        (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.18f)
+                                    } else {
+                                        0f // Прекращаем спавн новых, пока игрок не начнет их лопать
+                                    }
 
                                     if (Random.nextFloat() < spawnChance) {
                                         val radius = 40f
@@ -279,8 +285,8 @@ private fun CatchGameApp() {
                                             roll < 0.34f -> ItemKind.SLOW
                                             else -> ItemKind.NORMAL
                                         }
-                                        val levelBonus = ((activeLevel - 1) * 0.3f).coerceAtMost(6f)
-                                        val speed = Random.nextFloat() * 2.5f + 3.5f + levelBonus
+                                        val levelBonus = ((activeLevel - 1) * 0.25f).coerceAtMost(4f)
+                                        val speed = Random.nextFloat() * 2.0f + 3.0f + levelBonus
                                         
                                         items.add(
                                             FallingItem(
