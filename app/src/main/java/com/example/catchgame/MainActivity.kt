@@ -96,7 +96,6 @@ private fun CatchGameApp() {
         mutableStateOf(prefs.getBoolean("vibration_on", true))
     }
 
-    // Используем mutableStateListOf для мгновенного изменения состояния без задержек рендеринга
     val items = remember { mutableStateListOf<FallingItem>() }
     var nextItemId by remember { mutableIntStateOf(0) }
 
@@ -242,7 +241,7 @@ private fun CatchGameApp() {
                         val screenWidth = constraints.maxWidth.toFloat()
                         val screenHeight = constraints.maxHeight.toFloat()
                         val stars = remember(screenWidth, screenHeight) {
-                            List(72) {
+                            List(50) { // Уменьшили количество фоновых звезд для снижения нагрузки на GPU
                                 Star(
                                     x = Random.nextFloat() * screenWidth.coerceAtLeast(1f),
                                     y = Random.nextFloat() * screenHeight.coerceAtLeast(1f),
@@ -283,7 +282,6 @@ private fun CatchGameApp() {
                                         val levelBonus = ((activeLevel - 1) * 0.3f).coerceAtMost(6f)
                                         val speed = Random.nextFloat() * 2.5f + 3.5f + levelBonus
                                         
-                                        // Безопасное добавление через mutableStateListOf
                                         items.add(
                                             FallingItem(
                                                 id = nextItemId++,
@@ -298,17 +296,17 @@ private fun CatchGameApp() {
 
                                     val timeScale = if (currentSlowSeconds > 0f) 0.38f else 1f
                                     
-                                    // Обновляем позиции существующих элементов «на месте»
-                                    val iterator = items.listIterator()
-                                    while (iterator.hasNext()) {
-                                        val item = iterator.next()
+                                    // Быстрое обновление позиций без задержек сборщика мусора
+                                    val updatedList = items.mapNotNull { item ->
                                         val newY = item.y + item.speed * timeScale * frameScale
                                         if (newY > screenHeight + item.radius * 2) {
-                                            iterator.remove()
+                                            null
                                         } else {
-                                            iterator.set(item.copy(y = newY))
+                                            item.copy(y = newY)
                                         }
                                     }
+                                    items.clear()
+                                    items.addAll(updatedList)
 
                                     if (currentSlowSeconds > 0f) {
                                         slowSeconds = (currentSlowSeconds - deltaSeconds).coerceAtLeast(0f)
@@ -324,16 +322,15 @@ private fun CatchGameApp() {
                                         return@detectTapGestures
                                     }
                                     
-                                    // Ищем шар по обратном порядку (сверху) с огромным радиусом захвата 85f
                                     val hit = items.asReversed().firstOrNull { item ->
                                         val dx = tap.x - item.x
                                         val dy = tap.y - item.y
-                                        val hitRadius = item.radius + 85f
+                                        val hitRadius = item.radius + 70f
                                         dx * dx + dy * dy <= hitRadius * hitRadius
                                     }
 
                                     if (hit != null) {
-                                        items.remove(hit) // Мгновенное удаление объекта из списка
+                                        items.remove(hit)
                                         when (hit.kind) {
                                             ItemKind.BOMB -> {
                                                 lives = (lives - 1).coerceAtLeast(0)
@@ -357,25 +354,6 @@ private fun CatchGameApp() {
                                 )
                             }
 
-                            drawCircle(
-                                Brush.radialGradient(
-                                    listOf(Color(0xFF3730A3).copy(alpha = 0.17f), Color.Transparent),
-                                    center = Offset(size.width * 0.18f, size.height * 0.35f),
-                                    radius = size.width * 0.58f
-                                ),
-                                radius = size.width * 0.58f,
-                                center = Offset(size.width * 0.18f, size.height * 0.35f)
-                            )
-                            drawCircle(
-                                Brush.radialGradient(
-                                    listOf(Color(0xFF007C91).copy(alpha = 0.12f), Color.Transparent),
-                                    center = Offset(size.width * 0.88f, size.height * 0.72f),
-                                    radius = size.width * 0.48f
-                                ),
-                                radius = size.width * 0.48f,
-                                center = Offset(size.width * 0.88f, size.height * 0.72f)
-                            )
-
                             items.forEach { item ->
                                 val center = Offset(item.x, item.y)
                                 val color = when (item.kind) {
@@ -385,6 +363,7 @@ private fun CatchGameApp() {
                                     ItemKind.SLOW -> Color(0xFF00D9FF)
                                 }
 
+                                // Оптимизированный радиальный градиент шара
                                 drawCircle(
                                     brush = Brush.radialGradient(
                                         colors = listOf(
@@ -588,7 +567,7 @@ private fun SettingToggle(title: String, checked: Boolean, onCheckedChange: (Boo
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, color = Color.White, fontSize: 15.sp, fontWeight = FontWeight.SemiBold)
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
