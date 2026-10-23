@@ -1,23 +1,17 @@
 package com.example.catchgame
 
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Color as AndroidColor
-import android.graphics.Paint
-import android.graphics.RadialGradient
-import android.graphics.Shader
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.view.MotionEvent
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -25,21 +19,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.withFrameNanos
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.sin
 import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = AndroidColor.rgb(5, 5, 15)
-        window.navigationBarColor = AndroidColor.rgb(5, 5, 15)
+        window.statusBarColor = android.graphics.Color.rgb(5, 5, 15)
+        window.navigationBarColor = android.graphics.Color.rgb(5, 5, 15)
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize(), color = Color(0xFF05050F)) {
@@ -55,12 +57,14 @@ private enum class ItemKind { NORMAL, BOMB, GOLD, SLOW }
 
 private data class FallingItem(
     val id: Int,
-    var x: Float,
-    var y: Float,
+    val x: Float,
+    val y: Float,
     val radius: Float,
     val kind: ItemKind,
     val speed: Float
 )
+
+private data class Star(val x: Float, val y: Float, val radius: Float)
 
 @Composable
 private fun CatchGameApp() {
@@ -79,6 +83,16 @@ private fun CatchGameApp() {
     var soundOn by remember { mutableStateOf(prefs.getBoolean("sound_on", true)) }
     var vibrationOn by remember { mutableStateOf(prefs.getBoolean("vibration_on", true)) }
 
+    val items = remember { mutableStateListOf<FallingItem>() }
+    var nextItemId by remember { mutableIntStateOf(0) }
+
+    val currentScreen by rememberUpdatedState(screen)
+    val currentPaused by rememberUpdatedState(paused)
+    val currentGameOver by rememberUpdatedState(gameOver)
+    val currentScore by rememberUpdatedState(score)
+    val currentSlowSeconds by rememberUpdatedState(slowSeconds)
+    val currentSoundOn by rememberUpdatedState(soundOn)
+    val currentVibrationOn by rememberUpdatedState(vibrationOn)
     val level = score / 10 + 1
 
     LaunchedEffect(score) {
@@ -89,7 +103,7 @@ private fun CatchGameApp() {
     }
 
     fun feedback(isBomb: Boolean = false) {
-        if (soundOn) {
+        if (currentSoundOn) {
             try {
                 val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
                 tone.startTone(
@@ -99,7 +113,7 @@ private fun CatchGameApp() {
                 tone.release()
             } catch (_: Exception) { }
         }
-        if (vibrationOn) {
+        if (currentVibrationOn) {
             try {
                 val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 if (vibrator?.hasVibrator() == true) {
@@ -120,6 +134,8 @@ private fun CatchGameApp() {
         score = 0
         lives = 3
         slowSeconds = 0f
+        items.clear()
+        nextItemId = 0
         gameOver = false
         paused = false
         screen = GameScreen.GAME
@@ -175,24 +191,6 @@ private fun CatchGameApp() {
                     )
                 )
             ) {
-                AndroidView(
-                    factory = { ctx ->
-                        GameSurfaceView(ctx).apply {
-                            onScoreChanged = { pts -> score += pts }
-                            onLifeLost = {
-                                lives = (lives - 1).coerceAtLeast(0)
-                                if (lives == 0) gameOver = true
-                            }
-                            onSlowTriggered = { slowSeconds = 3f }
-                            onFeedback = { isBomb -> feedback(isBomb) }
-                            getLevel = { score / 10 + 1 }
-                            isPaused = { paused }
-                            isGameOver = { gameOver } // Исправлено: убран аргумент
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-
                 Column(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxWidth().padding(16.dp)) {
                         Row(
@@ -223,6 +221,196 @@ private fun CatchGameApp() {
                             Text("⏳ ВРЕМЯ ЗАМЕДЛЕНО", color = Color(0xFF00E5FF), fontSize = 13.sp, fontWeight = FontWeight.Black)
                         }
                     }
+
+                    BoxWithConstraints(
+                        Modifier.fillMaxWidth().weight(1f)
+                    ) {
+                        val screenWidth = constraints.maxWidth.toFloat()
+                        val screenHeight = constraints.maxHeight.toFloat()
+                        
+                        // Статичные звезды без мерцания (убирает расчеты в каждом кадре)
+                        val stars = remember(screenWidth, screenHeight) {
+                            List(20) {
+                                Star(
+                                    x = Random.nextFloat() * screenWidth.coerceAtLeast(1f),
+                                    y = Random.nextFloat() * screenHeight.coerceAtLeast(1f),
+                                    radius = 1.2f
+                                )
+                            }
+                        }
+
+                        // Игровой цикл на VSYNC через withFrameNanos
+                        LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
+                            if (screen == GameScreen.GAME && !paused && !gameOver &&
+                                screenWidth > 0f && screenHeight > 0f
+                            ) {
+                                var lastTime = System.nanoTime()
+                                while (true) {
+                                    val frameTime = withFrameNanos { it }
+                                    if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) break
+
+                                    val deltaSeconds = ((frameTime - lastTime) / 1_000_000_000f).coerceIn(0f, 0.05f)
+                                    lastTime = frameTime
+
+                                    val activeLevel = currentScore / 10 + 1
+
+                                    // Жесткое ограничение: не больше 22 шаров одновременно, чтобы игра не лагала
+                                    val spawnChance = if (items.size < 22) {
+                                        val spawnRate = 2.0f * (1f + (activeLevel - 1) * 0.04f)
+                                        (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.12f)
+                                    } else {
+                                        0f
+                                    }
+
+                                    if (Random.nextFloat() < spawnChance) {
+                                        val radius = 40f
+                                        val maxX = (screenWidth - radius * 2).coerceAtLeast(0f)
+                                        val roll = Random.nextFloat()
+                                        val kind = when {
+                                            roll < 0.15f -> ItemKind.BOMB
+                                            roll < 0.27f -> ItemKind.GOLD
+                                            roll < 0.34f -> ItemKind.SLOW
+                                            else -> ItemKind.NORMAL
+                                        }
+                                        val levelBonus = ((activeLevel - 1) * 0.2f).coerceAtMost(3.5f)
+                                        val speed = Random.nextFloat() * 1.5f + 2.5f + levelBonus
+
+                                        items.add(
+                                            FallingItem(
+                                                id = nextItemId++,
+                                                x = Random.nextFloat() * maxX + radius,
+                                                y = -radius,
+                                                radius = if (kind == ItemKind.GOLD) 34f else radius,
+                                                kind = kind,
+                                                speed = speed
+                                            )
+                                        )
+                                    }
+
+                                    val timeScale = if (currentSlowSeconds > 0f) 0.38f else 1f
+                                    
+                                    val iterator = items.listIterator()
+                                    while (iterator.hasNext()) {
+                                        val item = iterator.next()
+                                        val newY = item.y + item.speed * timeScale * (deltaSeconds / 0.025f)
+                                        if (newY > screenHeight + item.radius * 2) {
+                                            iterator.remove()
+                                        } else {
+                                            item.y = newY
+                                        }
+                                    }
+
+                                    if (currentSlowSeconds > 0f) {
+                                        slowSeconds = (currentSlowSeconds - deltaSeconds).coerceAtLeast(0f)
+                                    }
+                                }
+                            }
+                        }
+
+                        Canvas(
+                            Modifier.fillMaxSize().pointerInput(Unit) {
+                                detectTapGestures { tap ->
+                                    if (currentScreen != GameScreen.GAME || currentPaused || currentGameOver) {
+                                        return@detectTapGestures
+                                    }
+                                    
+                                    val hit = items.asReversed().firstOrNull { item ->
+                                        val dx = tap.x - item.x
+                                        val dy = tap.y - item.y
+                                        val hitRadius = item.radius + 70f
+                                        dx * dx + dy * dy <= hitRadius * hitRadius
+                                    }
+
+                                    if (hit != null) {
+                                        items.remove(hit)
+                                        when (hit.kind) {
+                                            ItemKind.BOMB -> {
+                                                lives = (lives - 1).coerceAtLeast(0)
+                                                feedback(isBomb = true)
+                                                if (lives == 0) gameOver = true
+                                            }
+                                            ItemKind.GOLD -> { score += 5; feedback() }
+                                            ItemKind.SLOW -> { score += 2; slowSeconds = 3f; feedback() }
+                                            ItemKind.NORMAL -> { score += 1; feedback() }
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            stars.forEach { star ->
+                                drawCircle(Color(0xFFB7D8FF).copy(alpha = 0.4f), star.radius, Offset(star.x, star.y))
+                            }
+
+                            items.forEach { item ->
+                                val center = Offset(item.x, item.y)
+                                val color = when (item.kind) {
+                                    ItemKind.NORMAL -> Color(0xFFFFC928)
+                                    ItemKind.BOMB -> Color(0xFFFF315A)
+                                    ItemKind.GOLD -> Color(0xFFFFD700)
+                                    ItemKind.SLOW -> Color(0xFF00D9FF)
+                                }
+
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            Color.White,
+                                            color.copy(alpha = 0.95f),
+                                            color.copy(alpha = 0.85f),
+                                            color.copy(red = color.red * 0.4f, green = color.green * 0.4f, blue = color.blue * 0.5f)
+                                        ),
+                                        center = Offset(item.x - item.radius * 0.3f, item.y - item.radius * 0.3f),
+                                        radius = item.radius * 1.4f
+                                    ),
+                                    radius = item.radius,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color.copy(alpha = 0.85f),
+                                    radius = item.radius,
+                                    center = center,
+                                    style = Stroke(width = 1.5f)
+                                )
+
+                                drawCircle(
+                                    Color.White.copy(alpha = 0.85f),
+                                    radius = item.radius * 0.2f,
+                                    center = Offset(item.x - item.radius * 0.3f, item.y - item.radius * 0.3f)
+                                )
+
+                                when (item.kind) {
+                                    ItemKind.BOMB -> {
+                                        drawLine(Color.White.copy(alpha = 0.9f),
+                                            Offset(item.x - item.radius * 0.25f, item.y),
+                                            Offset(item.x + item.radius * 0.25f, item.y),
+                                            strokeWidth = 2.5f, cap = StrokeCap.Round)
+                                        drawLine(Color.White.copy(alpha = 0.9f),
+                                            Offset(item.x, item.y - item.radius * 0.25f),
+                                            Offset(item.x, item.y + item.radius * 0.25f),
+                                            strokeWidth = 2.5f, cap = StrokeCap.Round)
+                                    }
+                                    ItemKind.GOLD -> {
+                                        val path = Path()
+                                        val outer = item.radius * 0.4f
+                                        val inner = outer * 0.45f
+                                        for (i in 0 until 10) {
+                                            val angle = -PI / 2.0 + i * PI / 5.0
+                                            val r = if (i % 2 == 0) outer else inner
+                                            val px = item.x + cos(angle).toFloat() * r
+                                            val py = item.y + sin(angle).toFloat() * r
+                                            if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                                        }
+                                        path.close()
+                                        drawPath(path, Color(0xFFFFF4B0))
+                                    }
+                                    ItemKind.SLOW -> {
+                                        drawCircle(Color.White.copy(alpha = 0.9f), item.radius * 0.45f,
+                                            center, style = Stroke(width = 2f))
+                                    }
+                                    else -> {}
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (!paused && !gameOver) {
@@ -249,187 +437,6 @@ private fun CatchGameApp() {
                     }
                 }
             }
-        }
-    }
-}
-
-class GameSurfaceView(context: Context) : SurfaceView(context), SurfaceHolder.Callback, Runnable {
-    private var thread: Thread? = null
-    private var running = false
-
-    private val items = mutableListOf<FallingItem>()
-    private var nextItemId = 0
-    private var lastTimeNanos = System.nanoTime()
-
-    var onScoreChanged: (Int) -> Unit = {}
-    var onLifeLost: () -> Unit = {}
-    var onSlowTriggered: () -> Unit = {}
-    var onFeedback: (Boolean) -> Unit = {}
-    var getLevel: () -> Int = { 1 }
-    var isPaused: () -> Boolean = { false }
-    var isGameOver: () -> Boolean = { false }
-
-    private val paint = Paint().apply { isAntiAlias = true }
-
-    init {
-        holder.addCallback(this)
-    }
-
-    override fun surfaceCreated(holder: SurfaceHolder) {
-        running = true
-        thread = Thread(this)
-        thread?.start()
-    }
-
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
-
-    override fun surfaceDestroyed(holder: SurfaceHolder) {
-        running = false
-        var retry = true
-        while (retry) {
-            try {
-                thread?.join()
-                retry = false
-            } catch (_: InterruptedException) { }
-        }
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_DOWN) {
-            if (isPaused() || isGameOver()) return true
-
-            val tapX = event.x
-            val tapY = event.y
-
-            synchronized(items) {
-                val hit = items.asReversed().firstOrNull { item ->
-                    val dx = tapX - item.x
-                    val dy = tapY - item.y
-                    val hitRadius = item.radius + 75f
-                    dx * dx + dy * dy <= hitRadius * hitRadius
-                }
-
-                if (hit != null) {
-                    items.remove(hit)
-                    when (hit.kind) {
-                        ItemKind.BOMB -> {
-                            onLifeLost()
-                            onFeedback(true)
-                        }
-                        ItemKind.GOLD -> {
-                            onScoreChanged(5)
-                            onFeedback(false)
-                        }
-                        ItemKind.SLOW -> {
-                            onScoreChanged(2)
-                            onSlowTriggered()
-                            onFeedback(false)
-                        }
-                        ItemKind.NORMAL -> {
-                            onScoreChanged(1)
-                            onFeedback(false)
-                        }
-                    }
-                }
-            }
-        }
-        return true
-    }
-
-    override fun run() {
-        while (running) {
-            val nowNanos = System.nanoTime()
-            val deltaSeconds = ((nowNanos - lastTimeNanos) / 1_000_000_000f).coerceIn(0f, 0.05f)
-            lastTimeNanos = nowNanos
-
-            if (!isPaused() && !isGameOver() && width > 0 && height > 0) {
-                val level = getLevel()
-                val spawnRate = 2.4f * (1f + (level - 1) * 0.05f)
-                val spawnChance = if (items.size < 30) {
-                    (1f - exp(-spawnRate * deltaSeconds)).coerceIn(0f, 0.16f)
-                } else {
-                    0f
-                }
-
-                synchronized(items) {
-                    if (Random.nextFloat() < spawnChance) {
-                        val radius = 40f
-                        val maxX = (width - radius * 2).coerceAtLeast(0f)
-                        val roll = Random.nextFloat()
-                        val kind = when {
-                            roll < 0.15f -> ItemKind.BOMB
-                            roll < 0.27f -> ItemKind.GOLD
-                            roll < 0.34f -> ItemKind.SLOW
-                            else -> ItemKind.NORMAL
-                        }
-                        val levelBonus = ((level - 1) * 0.25f).coerceAtMost(4f)
-                        val speed = Random.nextFloat() * 2.0f + 3.0f + levelBonus
-
-                        items.add(
-                            FallingItem(
-                                id = nextItemId++,
-                                x = Random.nextFloat() * maxX + radius,
-                                y = -radius,
-                                radius = if (kind == ItemKind.GOLD) 34f else radius,
-                                kind = kind,
-                                speed = speed
-                            )
-                        )
-                    }
-
-                    val iterator = items.listIterator()
-                    while (iterator.hasNext()) {
-                        val item = iterator.next()
-                        val newY = item.y + item.speed * (deltaSeconds / 0.025f)
-                        if (newY > height + item.radius * 2) {
-                            iterator.remove()
-                        } else {
-                            item.y = newY
-                        }
-                    }
-                }
-            }
-
-            val canvas = holder.lockCanvas()
-            if (canvas != null) {
-                canvas.drawColor(AndroidColor.rgb(3, 3, 11))
-
-                synchronized(items) {
-                    items.forEach { item ->
-                        val color = when (item.kind) {
-                            ItemKind.NORMAL -> AndroidColor.rgb(255, 201, 40)
-                            ItemKind.BOMB -> AndroidColor.rgb(255, 49, 90)
-                            ItemKind.GOLD -> AndroidColor.rgb(255, 215, 0)
-                            ItemKind.SLOW -> AndroidColor.rgb(0, 217, 255)
-                        }
-
-                        paint.shader = RadialGradient(
-                            item.x - item.radius * 0.34f, item.y - item.radius * 0.38f,
-                            item.radius * 1.48f,
-                            intArrayOf(AndroidColor.WHITE, color, color, AndroidColor.rgb(40, 40, 80)),
-                            floatArrayOf(0f, 0.3f, 0.7f, 1f),
-                            Shader.TileMode.CLAMP
-                        )
-                        canvas.drawCircle(item.x, item.y, item.radius, paint)
-                        paint.shader = null
-
-                        paint.color = color
-                        paint.style = Paint.Style.STROKE
-                        paint.strokeWidth = 1.7f
-                        canvas.drawCircle(item.x, item.y, item.radius, paint)
-                        paint.style = Paint.Style.FILL
-
-                        paint.color = AndroidColor.argb(220, 255, 255, 255)
-                        canvas.drawCircle(item.x - item.radius * 0.34f, item.y - item.radius * 0.38f, item.radius * 0.20f, paint)
-                    }
-                }
-
-                holder.unlockCanvasAndPost(canvas)
-            }
-
-            try {
-                Thread.sleep(14L)
-            } catch (_: InterruptedException) { }
         }
     }
 }
