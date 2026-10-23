@@ -36,7 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.withFrameNanos
+import androidx.compose.runtime.withFrameNanos
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
@@ -251,7 +251,6 @@ private fun CatchGameApp() {
                         }
                         var visualTime by remember { mutableFloatStateOf(0f) }
 
-                        // Игровой цикл на базе точного системного таймера VSYNC (withFrameNanos)
                         LaunchedEffect(screen, paused, gameOver, screenWidth, screenHeight) {
                             if (screen == GameScreen.GAME && !paused && !gameOver &&
                                 screenWidth > 0f && screenHeight > 0f
