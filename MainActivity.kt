@@ -1,4 +1,4 @@
-package com.example.catchgame // Замените на название вашего пакета (package), если оно отличается
+package com.example.catchgame
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -24,11 +24,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                GameScreen()
+            MaterialTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    GameScreen()
+                }
             }
         }
     }
